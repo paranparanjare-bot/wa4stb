@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  wa-bot-stb:
+    build: .
+    container_name: wa-bot-stb
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data/sessions:/app/data/sessions
+      - ./data/media/qris:/app/data/media/qris
+      - ./data/media/receipts:/app/data/media/receipts
+      - ./data/knowledge:/app/data/knowledge
+      - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    networks:
+      - bot-net
+
+networks:
+  bot-net:
+    driver: bridge

@@ -1,0 +1,7 @@
+[2026-08-27T10:04:40.983Z] [INFO] [main] Starting WA-STB Bot v1.0.0
+[2026-08-27T10:04:40.988Z] [INFO] [telegram] Telegram control panel started
+[2026-08-27T10:04:41.126Z] [INFO] [main] Bot initialized
+[2026-08-27T10:04:43.974Z] [INFO] [wa-handler] WhatsApp connected!
+[2026-08-27T10:07:00.109Z] [WARN] [wa-handler] Logged out, need re-scan
+[2026-08-27T10:11:49.630Z] [ERROR] [telegram] Poll error {"error":"request to https://api.telegram.org/bot7956448613:AAEMejusGf62KvWe20Ml1VwYEp2wdj_Mu9k/getUpdates?offset=0&timeout=1 failed, reason: read ECONNRESET"}
+[2026-08-27T10:17:23.252Z] [ERROR] [telegram] Poll error {"error":"request to https://api.telegram.org/bot7956448613:AAEMejusGf62KvWe20Ml1VwYEp2wdj_Mu9k/getUpdates?offset=0&timeout=1 failed, reason: read ECONNRESET"}

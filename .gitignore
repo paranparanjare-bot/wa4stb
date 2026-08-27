@@ -1,0 +1,6 @@
+node_modules/
+data/sessions/
+data/media/receipts/
+logs/
+.env
+*.log
