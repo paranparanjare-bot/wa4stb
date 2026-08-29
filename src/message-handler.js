@@ -1,4 +1,4 @@
-const { log } = require('./utils');
+const { log, findKbAnswer, buildBusinessMenu, hasAIConfig, getAdminContactPhone } = require('./utils');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { askAI } = require('./ai-service');
 const {
@@ -27,9 +27,12 @@ async function handleMessage(sock, chatId, msg) {
   const txn = getTransaction(from);
   const lower = text.toLowerCase().trim();
 
-  if (['menu', '/menu', '/start', 'help', 'halo', 'hai', 'hi'].includes(lower)) {
+  if (['menu', '/menu', '/start', 'help', 'halo', 'hai', 'hi', '0'].includes(lower)) {
     resetTransaction(from);
-    await sock.sendMessage(from, { text: 'Selamat datang Kak...\nSaya CS Bumbu Betutu BR siap melayani, silahkan jika ada pertanyaan.\n\nUntuk pemesanan silahkan ketik *PESAN*\nInfo lengkap juga tersedia di website kami:\nhttps://betutu.my.id' });
+    const businessMenu = buildBusinessMenu();
+    await sock.sendMessage(from, {
+      text: businessMenu
+    });
     return;
   }
 
@@ -160,14 +163,27 @@ async function handleMessage(sock, chatId, msg) {
   // AI chat
   if (lower.startsWith('tanya ') || lower.startsWith('ai ') || lower.startsWith('!ai ')) {
     const question = text.replace(/^(tanya|ai|!ai)\s+/i, '');
-    const answer = await askAI(question);
-    await sock.sendMessage(from, { text: answer });
+    const kbAnswer = findKbAnswer(question);
+    if (kbAnswer) {
+      await sock.sendMessage(from, { text: kbAnswer });
+      return;
+    }
+    if (hasAIConfig()) {
+      const answer = await askAI(question);
+      await sock.sendMessage(from, { text: answer });
+      return;
+    }
+  }
+
+  const kbAnswer = findKbAnswer(text);
+  if (kbAnswer) {
+    await sock.sendMessage(from, { text: `${kbAnswer}\n\n_ketik 0 untuk kembali ke menu_` });
     return;
   }
 
-  // Default: forward to AI
-  const answer = await askAI(text);
-  await sock.sendMessage(from, { text: answer });
+  // Default: if no KB answer, answer with menu and do NOT notify telegram admin to avoid noise/ambiguity
+  const businessMenu = buildBusinessMenu();
+  await sock.sendMessage(from, { text: businessMenu + '\n\n_ketik 0 untuk kembali ke menu_' });
 }
 
 module.exports = { handleMessage };

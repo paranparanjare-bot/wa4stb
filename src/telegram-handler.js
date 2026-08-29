@@ -8,22 +8,46 @@ const {
   getFinalNotaMessage, getReceiptMessage, resetTransaction, getAllPending,
 } = require('./transaction-manager');
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_ID = process.env.TELEGRAM_ADMIN_ID;
 const KB_DIR = path.join(DATA_DIR, 'knowledge');
+const WA_STATUS_FILE = path.join(DATA_DIR, 'wa-status.json');
 let offset = 0;
 let awaitingKB = null;
 let getSockRef = null; // getter function for WA sock
 let waStatus = 'disconnected';
 let lastQR = null; // last QR string for /qr resend
 
-function setWAStatus(s) { waStatus = s; }
+function getWAStatus() {
+  try {
+    if (fs.existsSync(WA_STATUS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(WA_STATUS_FILE, 'utf-8'));
+      return data.status || 'disconnected';
+    }
+  } catch (e) { log('debug', 'telegram', 'Read wa-status.json failed', { error: e.message }); }
+  return waStatus;
+}
+function getLastQR() { return lastQR; }
+
+function getTelegramConfig() {
+  return {
+    token: process.env.TELEGRAM_BOT_TOKEN,
+    adminId: process.env.TELEGRAM_ADMIN_ID,
+  };
+}
+
+function setWAStatus(s) {
+  waStatus = s;
+  try {
+    fs.writeFileSync(WA_STATUS_FILE, JSON.stringify({ status: s, timestamp: Date.now() }, null, 2), 'utf-8');
+  } catch (e) { log('error', 'telegram', 'Write wa-status.json failed', { error: e.message }); }
+}
 function setWASockRef(fn) { getSockRef = fn; }
 function getWASock() { return getSockRef ? getSockRef() : null; }
 
 async function sendMsg(chatId, text, opts = {}) {
+  const { token } = getTelegramConfig();
+  if (!token || !chatId) return;
   try {
-    await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown', ...opts }),
@@ -32,13 +56,15 @@ async function sendMsg(chatId, text, opts = {}) {
 }
 
 async function sendPhoto(chatId, buffer, opts = {}) {
+  const { token } = getTelegramConfig();
+  if (!token || !chatId) return;
   try {
     const form = new FormData();
     form.append('chat_id', String(chatId));
     form.append('photo', buffer, { filename: 'qr.png', contentType: 'image/png' });
     if (opts.caption) form.append('caption', opts.caption);
     if (opts.parse_mode) form.append('parse_mode', opts.parse_mode);
-    await fetch(`https://api.telegram.org/bot${TOKEN}/sendPhoto`, {
+    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
       method: 'POST',
       body: form,
     });
@@ -52,16 +78,19 @@ async function sendPhotoMsg(chatId, buffer, caption = '') {
   
 // Generate QR PNG from string and send to admin
 async function sendQRToTelegram(qrString) {
+  const { adminId } = getTelegramConfig();
+  if (!adminId) return;
   lastQR = qrString;
   const QRCode = require('qrcode');
   try {
     const buffer = await QRCode.toBuffer(qrString, { width: 300, margin: 2 });
-    await sendPhoto(ADMIN_ID, buffer, { caption: '📱 Scan QR code WhatsApp di bawah ya', parse_mode: 'Markdown' });
+    await sendPhoto(adminId, buffer, { caption: '📱 Scan QR code WhatsApp di bawah ya', parse_mode: 'Markdown' });
   } catch (e) { log('error', 'telegram', 'QR send failed', { error: e.message }); }
 }
 
 async function handleCommand(chatId, text) {
-  if (String(chatId) !== String(ADMIN_ID)) return;
+  const { adminId } = getTelegramConfig();
+  if (String(chatId) !== String(adminId)) return;
 
   if (awaitingKB && !text.startsWith('/')) {
     const fp = path.join(KB_DIR, awaitingKB);
@@ -76,7 +105,21 @@ async function handleCommand(chatId, text) {
 
   if (['/start', '/menu', '/help'].includes(lower)) {
     const icon = waStatus === 'open' ? '🟢' : '🔴';
-    sendMsg(chatId, icon + ' WA Status: *' + waStatus + '*\n\n*Perintah:*\n/status — Status koneksi WA\n/qr — Dapatkan QR code scan ulang\n/kb — Lihat Knowledge Base\n/kbset — Perbarui Knowledge Base (replace total)\n/logs — Log hari ini\n/stats — Statistik\n\n*Order:*\n/ongkir BR0827-001 15000 — Set ongkir (tanpa spasi: /ongkirBR0827-001 15000)\n/lunas [nota] — Verifikasi bayar\n/pending — Lihat order aktif');
+    sendMsg(chatId, icon + ' WA Status: *' + waStatus + '*\n\n*Perintah:*\n/admin — Generate OTP admin web\n/status — Status koneksi WA\n/qr — Dapatkan QR code scan ulang\n/kb — Lihat Knowledge Base\n/kb_add [nama.txt] — Tambah/update KB\n/logs — Log hari ini\n/stats — Statistik\n\n*Order:*\n/ongkir BR0827-001 15000 — Set ongkir (tanpa spasi: /ongkirBR0827-001 15000)\n/lunas [nota] — Verifikasi bayar\n/pending — Lihat order aktif');
+    return;
+  }
+  if (lower === '/admin') {
+    const { token, adminId } = getTelegramConfig();
+    if (!token || !adminId) {
+      sendMsg(chatId, 'Konfigurasi Telegram belum lengkap. Isi token dan user ID di admin panel.');
+      return;
+    }
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpData = { code: otp, createdAt: Date.now() };
+    const { default: fs } = await import('node:fs');
+    const otpPath = path.join(DATA_DIR, 'admin-otp.json');
+    fs.writeFileSync(otpPath, JSON.stringify({ [String(chatId)]: otpData }, null, 2));
+    await sendMsg(chatId, `🔐 Kode OTP admin Anda:\n\n*${otp}*\n\nGunakan kode ini untuk login ke halaman admin. Kode berlaku 5 menit.`);
     return;
   }
   if (lower === '/status') {
@@ -218,10 +261,12 @@ async function handleCommand(chatId, text) {
 }
 
 async function pollUpdates() {
+  const { token, adminId } = getTelegramConfig();
+  if (!token || !adminId) return;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
-    const res = await fetch('https://api.telegram.org/bot' + TOKEN + '/getUpdates?offset=' + offset + '&timeout=2', {
+    const res = await fetch('https://api.telegram.org/bot' + token + '/getUpdates?offset=' + offset + '&timeout=2', {
       signal: controller.signal
     });
     clearTimeout(timeout);
@@ -230,7 +275,7 @@ async function pollUpdates() {
       for (const u of data.result) {
         offset = u.update_id + 1;
         const msg = u.message;
-        if (msg && String(msg.chat.id) === String(ADMIN_ID) && msg.text) {
+        if (msg && String(msg.chat.id) === String(adminId) && msg.text) {
           await handleCommand(msg.chat.id, msg.text);
         }
       }
@@ -243,9 +288,19 @@ async function pollUpdates() {
 }
 
 function startTelegramBot() {
-  if (!TOKEN || !ADMIN_ID) { log('warn', 'telegram', 'Telegram bot not configured'); return; }
+  const { token, adminId } = getTelegramConfig();
+  if (!token || !adminId) { log('warn', 'telegram', 'Telegram bot not configured'); return; }
   log('info', 'telegram', 'Telegram control panel started');
   setInterval(pollUpdates, 3000);
 }
 
-module.exports = { startTelegramBot, setWAStatus, setWASockRef, sendMsg, sendPhotoMsg, sendQRToTelegram };
+module.exports = {
+  startTelegramBot,
+  setWAStatus,
+  getWAStatus,
+  setWASockRef,
+  sendMsg,
+  sendPhotoMsg,
+  sendQRToTelegram,
+  getLastQR,
+};

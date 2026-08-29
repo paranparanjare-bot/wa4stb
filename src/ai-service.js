@@ -1,31 +1,50 @@
 const fetch = require('node-fetch');
-const { log, searchKnowledgeBase } = require('./utils');
+const { log, searchKnowledgeBase, findKbAnswer } = require('./utils');
 
-const API_URL = process.env.AI_API_URL || 'http://localhost:20128';
-const API_KEY = process.env.AI_API_KEY || '';
-const MODEL = process.env.AI_MODEL || 'gpt-3.5-turbo';
-const SYSTEM_PROMPT = `Kamu adalah asisten customer service (CS) untuk produk Bumbu Ayam Betutu BR yang ramah, profesional, dan selalu menyapa customer dengan sebutan 'Kak'. 
-Jawab pertanyaan dalam Bahasa Indonesia dengan singkat, jelas, dan natural.
-PENTING: 
-1. Gunakan informasi dari knowledge base secara mutlak jika relevan. Jangan mengarang informasi jika tidak ada.
-2. JANGAN PERNAH menyertakan catatan teknis, kode pemrograman, format python, catatan 'skipped', 'ponytail', atau komentar developer apa pun. Berbicaralah murni sebagai manusia / customer service toko.`;
+const SYSTEM_PROMPT = `Kamu adalah asisten customer service ramah yang mewakili toko. 
+Sapa customer dengan "Selamat datang Kak". 
+Gunakan Bahasa Indonesia natural, singkat, dan profesional.
+PENTING:
+1. Jawab pertanyaan berdasarkan informasi Knowledge Base yang diberikan.
+2. Jika informasi tidak ada di Knowledge Base, JANGAN MENGARANG. Jawab: "Mohon maaf jawaban belum tersedia, silahkan hubungi admin kami di wa.me/${process.env.BUSINESS_CONTACT_WA || 'nomor-admin'}" dan informasikan bahwa customer menunggu jawaban.
+3. JANGAN PERNAH menyertakan kode teknis atau catatan developer. Berbicaralah murni sebagai CS.`;
+
+function getAIConfig() {
+  return {
+    apiUrl: process.env.AI_API_URL || 'http://localhost:20128',
+    apiKey: process.env.AI_API_KEY || '',
+    model: process.env.AI_MODEL || 'combo',
+  };
+}
+
+function hasAIConfig() {
+  const { apiUrl, apiKey, model } = getAIConfig();
+  return !!(apiUrl && apiKey && model && apiUrl !== 'http://localhost:20128');
+}
 
 async function askAI(userMessage) {
+  const kbAnswer = findKbAnswer(userMessage);
+  if (!hasAIConfig()) {
+    if (kbAnswer) return kbAnswer;
+    return 'Maaf, saat ini bot berjalan dalam mode KB-only. Silakan cek menu utama atau isi data usaha di admin panel.';
+  }
+
   const kbResult = searchKnowledgeBase(userMessage);
   let systemPrompt = SYSTEM_PROMPT;
+  const { apiUrl, apiKey, model } = getAIConfig();
   if (kbResult) {
     systemPrompt += `\n\nBerikut adalah informasi dari knowledge base yang relevan:\n${kbResult}`;
   }
 
   try {
-    const res = await fetch(`${API_URL}/v1/chat/completions`, {
+    const res = await fetch(`${apiUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -40,11 +59,11 @@ async function askAI(userMessage) {
       return data.choices[0].message.content.trim();
     }
     log('error', 'ai-service', 'No choices in response', data);
-    return 'Maaf, saya tidak bisa memproses pesan saat ini. Silakan coba lagi.';
+    return kbAnswer || 'Maaf, saya tidak bisa memproses pesan saat ini. Silakan coba lagi.';
   } catch (err) {
     log('error', 'ai-service', 'API request failed', { error: err.message });
-    return 'Maaf, layanan AI sedang tidak tersedia. Silakan coba lagi nanti.';
+    return kbAnswer || 'Maaf, layanan AI sedang tidak tersedia. Silakan coba lagi nanti.';
   }
 }
 
-module.exports = { askAI };
+module.exports = { askAI, hasAIConfig, getAIConfig };

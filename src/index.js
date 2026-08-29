@@ -3,10 +3,13 @@ const { log, ensureDir } = require('./utils');
 const { startWA, getSock } = require('./wa-handler');
 const { cleanupOldReceipts } = require('./media-manager');
 const { startTelegramBot, setWASockRef, sendMsg } = require('./telegram-handler');
+const { startAdminServer } = require('./admin-server');
 const { checkExpiredTransactions, expireTransaction } = require('./transaction-manager');
 
+const botOnlyMode = process.argv.includes('--bot-only');
+
 async function main() {
-  log('info', 'main', 'Starting WA-STB Bot v1.0.0');
+  log('info', 'main', `Starting WA-STB Bot v1.0.0 (${botOnlyMode ? 'bot-only' : 'admin'})`);
 
   ['data/sessions', 'data/media/qris', 'data/media/receipts', 'data/knowledge', 'logs']
     .forEach(d => ensureDir(require('path').join(__dirname, '..', d)));
@@ -14,17 +17,17 @@ async function main() {
   cleanupOldReceipts();
   setInterval(cleanupOldReceipts, 30 * 60 * 1000);
 
-  // Start Telegram control panel
-  startTelegramBot();
+  if (!botOnlyMode) {
+    startAdminServer();
+    startTelegramBot();
+    log('info', 'main', 'Admin mode ready; WhatsApp will start only from Start Bot action.');
+    return;
+  }
 
-  // Start WhatsApp bot
   await startWA();
-
-    // Pass WA socket to telegram handler (for sending messages to customers)
   setWASockRef(getSock);
   log('info', 'main', 'Bot initialized');
 
-  // Periodic deadline check every 5 minutes
   setInterval(function() {
     const expired = checkExpiredTransactions();
     const sock = getSock();
