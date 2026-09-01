@@ -1,12 +1,12 @@
 # WA-STB Bot (WhatsApp AI & License System)
 
-Bot WhatsApp berbasis Node.js menggunakan **Baileys**, terintegrasi dengan **AI (OpenAI / OpenRouter / Custom Gateway)**, dilengkapi **Knowledge Base (KB)**, sistem **Lisensi Server-Based via Cloudflare**, serta **Admin Panel Mobile-Friendly (Dark Mode)**.
+Bot WhatsApp berbasis Node.js menggunakan **Baileys**, terintegrasi dengan **AI (OpenAI / OpenRouter / Custom Gateway)**, dilengkapi **Knowledge Base (KB)**, sistem **Lisensi**, serta **Admin Panel Mobile-Friendly (Dark Mode)**.
 
 ---
 
 ## Fitur Unggulan
 1. **AI-First & KB Priority**: Bot memprioritaskan Knowledge Base lokal; jika tidak ditemukan, akan diteruskan ke AI. Jika AI tidak tahu, pesan otomatis diteruskan ke Telegram Admin.
-2. **Server-Based License System**: Dilindungi sistem lisensi universal yang terhubung ke Cloudflare Workers & KV (Status: *Standby*, *Running*, *Expired*).
+2. **License System**: Dilindungi sistem lisensi aktif untuk keamanan operasional bot.
 3. **Admin Panel Modern**: 
    - Start / Stop / QR Code (via Popup Modal) / Reset Session dalam satu baris menu horizontal.
    - Edit Knowledge Base langsung dari browser (dengan textarea besar).
@@ -36,10 +36,10 @@ npm install
 ### 3. Konfigurasi File Lingkungan (`.env`)
 Buat file `.env` di root folder proyek dengan menyalin contoh berikut:
 ```env
-TELEGRAM_BOT_TOKEN=8503152199:AAFQfgFkzJDOmXVcW_Ddl-iLnOtuNlZJFGI
-TELEGRAM_ADMIN_ID=788284460
+TELEGRAM_BOT_TOKEN=12345678:xxxxxxxxxxxx-xxxxxxxxxx
+TELEGRAM_ADMIN_ID=1234567890
 ADMIN_PORT=3000
-ADMIN_SESSION_SECRET=rahasia-banget-123
+ADMIN_SESSION_SECRET=adminpassword
 ```
 *(Catatan: Anda juga bisa mengisi bagian AI Config langsung lewat halaman Admin Panel di browser nantinya).*
 
@@ -74,7 +74,7 @@ http://<IP_SERVER_ANDA>:3000/admin
 
 ### 3. Aktivasi Lisensi
 Bot memerlukan lisensi valid agar dapat merespon pesan WhatsApp secara otomatis (*AI & KB*).
-1. Dapatkan *License Code* dari **Master Dashboard Cloudflare** Anda.
+1. Untuk mendapatkan *License Code*, silakan lakukan request melalui WhatsApp ke: [wa.me/6285111507890](https://wa.me/6285111507890).
 2. Masukkan kode tersebut ke dalam kolom **Aktivasi Lisensi** di Admin Panel, lalu klik **Aktifkan**.
 3. Status lisensi akan berubah menjadi **Active** lengkap dengan sisa masa aktifnya.
 
