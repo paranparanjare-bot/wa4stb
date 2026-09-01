@@ -59,7 +59,7 @@ function renderAdminHtml(isConnected, qr, ai, lic) {
     .replace('STATUS_DISPLAY', statusDisplay)
     .replace('DISABLE_START', isConnected ? 'disabled' : '')
     .replace('DISABLE_STOP', !isConnected ? 'disabled' : '')
-    .replace('QR_CONTENT', (qr && !isConnected) ? '<pre style="font-size:12px;line-height:1.2">' + qr.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>' : '<p style="color:#666">QR tidak tersedia / Bot sudah connected</p>')
+    .replace('QR_QRIMG', (fs.existsSync(path.join(__dirname, '..', 'public', 'qr-tmp.png')) ? '<img src="/qr-tmp.png?t=' + Date.now() + '" style="width:250px;max-width:100%;border-radius:8px">' : '<p style="color:#666">QR tidak tersedia. Klik Start Bot dulu.</p>'))
     .replace('AI_URL', esc(ai.aiUrl))
     .replace('AI_KEY', esc(ai.apiKey))
     .replace('AI_MODEL', esc(ai.model))
@@ -105,11 +105,29 @@ app.post('/admin/auth/change-password', async (req, res) => {
 app.post('/admin/start', (req, res) => { const { startWA } = require('./wa-handler'); startWA(); res.redirect('/admin'); });
 app.post('/admin/stop', (req, res) => { const { getSock } = require('./wa-handler'); if(getSock()){try{getSock().ws.close()}catch(e){}} res.redirect('/admin'); });
 
-app.post('/admin/reset-session', (req, res) => {
-  if (!req.session.isAdmin) return res.status(401).send('Unauthorized');
+// OTP Reset Session
+const OTP_STORE = {};
+async function sendOtpToTelegram(otp) {
+  const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const ADMIN_ID = process.env.TELEGRAM_ADMIN_ID;
+  if (!TOKEN || !ADMIN_ID) return;
+  try { await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: ADMIN_ID, text: `Reset Session OTP: ${otp}\nBerlaku 2 menit.` }) }); } catch(e) {}
+}
+app.post('/admin/reset-request-otp', async (req, res) => {
+  if (!req.session.isAdmin) return res.json({ success: false, message: 'Unauthorized' });
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  OTP_STORE[otp] = { expires: Date.now() + 120000 };
+  await sendOtpToTelegram(otp);
+  res.json({ success: true });
+});
+app.post('/admin/verify-reset-otp', (req, res) => {
+  if (!req.session.isAdmin) return res.json({ success: false, message: 'Unauthorized' });
+  const entry = OTP_STORE[req.body.otp];
+  if (!entry || Date.now() > entry.expires) { delete OTP_STORE[req.body.otp]; return res.json({ success: false, message: 'OTP salah / expired' }); }
+  delete OTP_STORE[req.body.otp];
   const sessDir = path.join(DATA_DIR, 'sessions');
   if (fs.existsSync(sessDir)) { fs.rmSync(sessDir, { recursive: true, force: true }); fs.mkdirSync(sessDir, { recursive: true }); }
-  res.redirect('/admin');
+  res.json({ success: true });
 });
 
 app.put('/admin/kb/:filename', (req, res) => {

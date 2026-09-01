@@ -40,12 +40,17 @@ async function startWA() {
     const { connection, lastDisconnect, qr } = update;
     if (qr) {
       try {
-        log('info', 'wa-handler', 'QR Code received, scan with WhatsApp');
+        log('info', 'wa-handler', 'QR Code received');
         qrcode.generate(qr, { small: true });
         setWAStatus('waiting_qr');
+        // Simpan QR sebagai gambar PNG untuk admin panel
+        const QRCode = require('qrcode');
+        const qrPath = path.join(DATA_DIR, '..', 'public', 'qr-tmp.png');
+        await QRCode.toFile(qrPath, qr, { width: 300, margin: 2 });
+        log('info', 'wa-handler', 'QR PNG saved');
         await sendQRToTelegram(qr);
       } catch (e) {
-        log('error', 'wa-handler', 'QR generation/send failed', { error: e.message });
+        log('error', 'wa-handler', 'QR failed', { error: e.message });
       }
     }
     if (connection === 'close') {

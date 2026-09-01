@@ -12,45 +12,48 @@
         body{background:#0f172a;color:#f8fafc;font-family:sans-serif;margin:0;padding:10px;box-sizing:border-box}
         .container{max-width:600px;margin:auto}
         .card{background:#1e293b;padding:15px;border-radius:10px;margin-bottom:15px}
-        .sticky-header{position:sticky;top:0;background:#0f172a;padding:15px;z-index:10;border-radius:10px;margin:0}
         h2,h3{margin-top:0;color:#38bdf8}
         input,select,textarea{width:100%;padding:8px;margin:5px 0;background:#0f172a;border:1px solid #334155;color:#fff;border-radius:6px;box-sizing:border-box}
         button{padding:8px 12px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;margin-top:5px}
         button.danger{background:#ef4444}button.success{background:#10b981}button:disabled{background:#475569;cursor:not-allowed}
-        .flex{display:flex;gap:8px;flex-wrap:wrap}
+        .flex{display:flex;gap:6px;flex-wrap:wrap}
         .small{font-size:12px;color:#94a3b8}
         .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);align-items:center;justify-content:center;z-index:999}
         .modal.active{display:flex}
-        .modal-content{background:#1e293b;padding:20px;border-radius:10px;max-width:95%;max-height:90%;overflow:auto}
+        .modal-content{background:#1e293b;padding:20px;border-radius:10px;max-width:95%;max-height:90%;overflow:auto;text-align:center}
+        .otp-input{font-size:24px;text-align:center;letter-spacing:8px;max-width:200px;margin:10px auto}
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Bot Control -->
         <div class="card">
-            <h2 class="h2">WA-STB Admin Panel</h2>
-            <div class="status">Status WA: <b id="waStatus">STATUS_DISPLAY</b></div>
-            <div class="flex" style="gap:6px"><form method="POST" action="/admin/start" style="flex:1"><button class="success" DISABLE_START style="width:100%;padding:6px;font-size:12px">Start</button></form><form method="POST" action="/admin/stop" style="flex:1"><button class="danger" DISABLE_STOP style="width:100%;padding:6px;font-size:12px">Stop</button></form><button class="danger" onclick="showQrModal()" style="flex:1;padding:6px;font-size:12px">QR</button><form method="POST" action="/admin/reset-session"><button class="danger" style="padding:6px;font-size:12px">Reset</button></form></div>
+            <h2>WA-STB Admin Panel</h2>
+            <div style="font-size:14px;padding:6px;background:#334155;border-radius:4px;margin-bottom:10px">Status WA: <b id="waStatus">STATUS_DISPLAY</b></div>
+            <div class="flex"><form method="POST" action="/admin/start" style="flex:1"><button class="success" style="width:100%;padding:6px;font-size:12px" DISABLE_START>Start</button></form><form method="POST" action="/admin/stop" style="flex:1"><button class="danger" style="width:100%;padding:6px;font-size:12px" DISABLE_STOP>Stop</button></form><button class="danger" onclick="showQrModal()" style="flex:1;padding:6px;font-size:12px">QR</button><button class="danger" onclick="showResetModal()" style="padding:6px;font-size:12px">Reset</button></div>
         </div>
 
         <!-- QR Modal -->
-        <div id="qrModal" class="modal"><div class="modal-content"><h3>QR Code WhatsApp</h3><div id="qrContent">QR_CONTENT</div><button onclick="closeQrModal()" style="margin-top:15px;">Tutup</button></div></div>
+        <div id="qrModal" class="modal"><div class="modal-content"><h3>QR Code WhatsApp</h3><div id="qrContent">QR_QRIMG</div><button onclick="closeQrModal()" style="margin-top:15px">Tutup</button></div></div>
 
-        <!-- AI Gateway Config -->
+        <!-- Reset OTP Modal -->
+        <div id="resetModal" class="modal"><div class="modal-content">
+            <h3>Reset Session</h3>
+            <div id="resetStep1"><p style="color:#94a3b8;font-size:13px">Kirim OTP ke Telegram dulu</p><button onclick="requestResetOtp()">Kirim OTP</button></div>
+            <div id="resetStep2" style="display:none"><input class="otp-input" id="resetOtp" maxlength="6" placeholder="000000"><button onclick="confirmReset()">Reset Sekarang</button></div>
+            <p id="resetMsg" style="font-size:12px;color:#38bdf8;margin-top:10px"></p>
+            <button style="margin-top:10px;background:#64748b" onclick="closeResetModal()">Batal</button>
+        </div></div>
+
         <div class="card"><h3>AI Gateway Config</h3><div class="small">Gateway URL:</div><input id="aiUrl" value="AI_URL"><div class="small">API Key:</div><input id="aiKey" type="password" value="AI_KEY"><div class="small">Model:</div><input id="aiModel" value="AI_MODEL"><button onclick="saveAi()">Simpan AI Config</button></div>
 
-        <!-- License -->
-        <div class="card"><h3>Lisensi</h3><div class="small">Status: LIC_STATUS</div><div class="lic-card"><div class="small">License Key:</div><input id="licKey" value="LIC_KEY"><div class="small" style="margin-top:6px">LIC_INFO</div><div style="margin-top:10px"><button onclick="saveLic()">Aktifkan</button><button class="danger" style="margin-left:8px" onclick="revokeLic()">Logout</button></div></div></div>
+        <div class="card"><h3>Lisensi</h3><div class="small">Status: LIC_STATUS</div><div style="border:1px solid #334155;border-radius:8px;padding:12px;margin-top:8px;background:#0f172a"><div class="small">License Key:</div><input id="licKey" value="LIC_KEY"><div class="small" style="margin-top:6px">LIC_INFO</div><div style="margin-top:10px"><button onclick="saveLic()">Aktifkan</button><button class="danger" style="margin-left:8px" onclick="revokeLic()">Logout</button></div></div></div>
 
-        <!-- Edit Knowledge Base -->
         <div class="card"><h3>Edit Knowledge Base</h3><select id="kb" onchange="loadKb()"><option value="">-- Pilih File KB --</option>KB_OPTIONS</select><textarea id="kbContent" rows="12" placeholder="Pilih file di atas..."></textarea><button onclick="saveKb()">Simpan KB</button></div>
 
-        <!-- Ganti Password (paling bawah) -->
         <div class="card"><h3>Ganti Password Admin</h3><input id="p1" type="password" placeholder="Password Lama"><input id="p2" type="password" placeholder="Password Baru"><button onclick="savePwd()">Simpan Password</button></div>
 
         <div class="card" style="text-align:center"><a href="/admin/logout" style="color:#ef4444;text-decoration:none;font-weight:bold">Logout</a></div>
     </div>
-
     <script>
         async function loadKb(){const f=document.getElementById('kb').value;if(!f){document.getElementById('kbContent').value='';return}const r=await fetch('/admin/kb/get/'+f);const d=await r.json();document.getElementById('kbContent').value=d.content||''}
         async function savePwd(){const o=document.getElementById('p1').value,n=document.getElementById('p2').value;if(!o||!n){alert('Isi kedua field');return}const r=await fetch('/admin/auth/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({oldPassword:o,newPassword:n})});alert((await r.json()).message)}
@@ -60,6 +63,10 @@
         async function revokeLic(){if(!confirm('Logout lisensi dari perangkat ini?'))return;const r=await fetch('/admin/auth/revoke-license',{method:'POST'});const d=await r.json();alert(d.message);location.reload()}
         function showQrModal(){document.getElementById('qrModal').classList.add('active')}
         function closeQrModal(){document.getElementById('qrModal').classList.remove('active')}
+        function showResetModal(){document.getElementById('resetModal').classList.add('active');document.getElementById('resetStep1').style.display='block';document.getElementById('resetStep2').style.display='none';document.getElementById('resetMsg').innerText='';document.getElementById('resetOtp').value=''}
+        function closeResetModal(){document.getElementById('resetModal').classList.remove('active')}
+        async function requestResetOtp(){document.getElementById('resetMsg').innerText='Mengirim OTP...';const r=await fetch('/admin/reset-request-otp',{method:'POST'});const d=await r.json();if(d.success){document.getElementById('resetStep1').style.display='none';document.getElementById('resetStep2').style.display='block';document.getElementById('resetMsg').innerText='OTP terkirim! Cek Telegram.'}else{document.getElementById('resetMsg').innerText='Gagal: '+d.message}}
+        async function confirmReset(){const otp=document.getElementById('resetOtp').value.trim();if(!otp){alert('Masukkan OTP');return}const r=await fetch('/admin/verify-reset-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp})});const d=await r.json();if(d.success){alert('Session di-reset!');location.reload()}else{alert('OTP salah / expired!')}}
         if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js')}
     </script>
 </body>
