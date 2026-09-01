@@ -30,6 +30,14 @@ function readEnvAI() {
   return { aiUrl: get('AI_API_URL'), apiKey: get('AI_API_KEY'), model: get('AI_MODEL') };
 }
 
+function readEnvTelegram() {
+  const envPath = path.join(DATA_DIR, '..', '.env');
+  if (!fs.existsSync(envPath)) return { token: '', adminId: '' };
+  const content = fs.readFileSync(envPath, 'utf8');
+  const get = (key) => { const m = content.match(new RegExp('^' + key + '=(.*)', 'm')); return m ? m[1] : ''; };
+  return { token: get('TELEGRAM_BOT_TOKEN'), adminId: get('TELEGRAM_ADMIN_ID') };
+}
+
 function readLicenseState() {
   const f = path.join(DATA_DIR, 'license-state.json');
   if (!fs.existsSync(f)) return null;
@@ -38,7 +46,7 @@ function readLicenseState() {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function renderAdminHtml(isConnected, qr, ai, lic) {
+function renderAdminHtml(isConnected, qr, ai, tg, lic) {
   let licStatus = '<span style="color:#ef4444">Tidak Aktif</span>';
   let licInfo = 'Lisensi belum diaktifkan';
   if (lic) {
@@ -60,6 +68,8 @@ function renderAdminHtml(isConnected, qr, ai, lic) {
     .replace('DISABLE_START', isConnected ? 'disabled' : '')
     .replace('DISABLE_STOP', !isConnected ? 'disabled' : '')
     .replace('QR_QRIMG', (fs.existsSync(path.join(__dirname, '..', 'public', 'qr-tmp.png')) ? '<img src="/qr-tmp.png?t=' + Date.now() + '" style="width:250px;max-width:100%;border-radius:8px">' : '<p style="color:#666">QR tidak tersedia. Klik Start Bot dulu.</p>'))
+    .replace('TELEGRAM_TOKEN', esc(tg.token))
+    .replace('TELEGRAM_ADMIN_ID', esc(tg.adminId))
     .replace('AI_URL', esc(ai.aiUrl))
     .replace('AI_KEY', esc(ai.apiKey))
     .replace('AI_MODEL', esc(ai.model))
@@ -86,8 +96,9 @@ app.get('/admin', (req, res) => {
   const isConnected = rawStatus === 'open' || rawStatus === 'connected';
   const qr = getLastQR();
   const ai = readEnvAI();
+  const tg = readEnvTelegram();
   const lic = readLicenseState();
-  res.send(renderAdminHtml(isConnected, qr, ai, lic));
+  res.send(renderAdminHtml(isConnected, qr, ai, tg, lic));
 });
 
 app.get('/admin/kb/get/:filename', (req, res) => {
@@ -146,6 +157,17 @@ app.post('/admin/config/ai', (req, res) => {
   set('AI_API_URL', aiUrl); set('AI_API_KEY', apiKey); set('AI_MODEL', model);
   fs.writeFileSync(envPath, c.trim() + '\n');
   res.json({ message: 'AI Config saved to .env' });
+});
+
+app.post('/admin/config/telegram', (req, res) => {
+  if (!req.session.isAdmin) return res.status(401).json({ message: 'Unauthorized' });
+  const { token, adminId } = req.body;
+  const envPath = path.join(DATA_DIR, '..', '.env');
+  let c = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+  const set = (k, v) => { if (c.match(new RegExp('^' + k + '='))) c = c.replace(new RegExp('^' + k + '=.*$', 'm'), k + '=' + v); else c += '\n' + k + '=' + v; };
+  set('TELEGRAM_BOT_TOKEN', token || ''); set('TELEGRAM_ADMIN_ID', adminId || '');
+  fs.writeFileSync(envPath, c.trim() + '\n');
+  res.json({ message: 'Telegram Config saved to .env' });
 });
 
 app.post('/admin/auth/activate-license', async (req, res) => {

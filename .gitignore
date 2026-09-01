@@ -1,6 +1,5 @@
 node_modules/
-data/sessions/
-data/media/receipts/
+data/
 logs/
 .env
 *.log
