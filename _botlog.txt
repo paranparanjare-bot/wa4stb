@@ -1,4 +1,0 @@
-[2026-08-27T12:12:41.722Z] [INFO] [main] Starting WA-STB Bot v1.0.0
-[2026-08-27T12:12:41.726Z] [INFO] [telegram] Telegram control panel started
-[2026-08-27T12:12:41.832Z] [INFO] [main] Bot initialized
-[2026-08-27T12:12:43.022Z] [WARN] [wa-handler] Logged out, need re-scan
