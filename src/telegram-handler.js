@@ -83,8 +83,9 @@ async function handleCommand(chatId, text) {
   }
 
   if (lower === '/restartnode') {
-    sendMsg(chatId, '🔄 Merestart proses Node.js...');
-    setTimeout(() => process.exit(0), 1000);
+    sendMsg(chatId, '🔄 Merestart proses...');
+    const { exec } = require('child_process');
+    exec('npx pm2 restart wa-stb || pm2 restart wa-stb');
     return;
   }
 

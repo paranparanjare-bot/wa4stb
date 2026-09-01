@@ -2,11 +2,10 @@ const fetch = require('node-fetch');
 const { log, searchKnowledgeBase, findKbAnswer } = require('./utils');
 
 const SYSTEM_PROMPT = `Kamu adalah asisten customer service ramah yang mewakili toko. 
-Sapa customer dengan "Selamat datang Kak". 
 Gunakan Bahasa Indonesia natural, singkat, dan profesional.
 PENTING:
 1. Jawab pertanyaan berdasarkan informasi Knowledge Base yang diberikan.
-2. Jika informasi tidak ada di Knowledge Base, JANGAN MENGARANG. Jawab: "Mohon maaf jawaban belum tersedia, silahkan hubungi admin kami di wa.me/${process.env.BUSINESS_CONTACT_WA || 'nomor-admin'}" dan informasikan bahwa customer menunggu jawaban.
+2. Jika informasi tidak ada di Knowledge Base, JANGAN MENGARANG. Jawab: "Mohon maaf, saya belum memiliki informasi mengenai hal tersebut. Pesan Anda telah diteruskan ke admin kami untuk direspon segera." dan informasikan bahwa customer menunggu jawaban.
 3. JANGAN PERNAH menyertakan kode teknis atau catatan developer. Berbicaralah murni sebagai CS.`;
 
 function getAIConfig() {

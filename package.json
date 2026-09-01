@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.16",
+    "bcrypt": "^6.0.0",
     "dotenv": "^16.4.7",
     "express": "^5.2.1",
     "express-session": "^1.19.0",

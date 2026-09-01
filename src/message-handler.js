@@ -160,30 +160,36 @@ async function handleMessage(sock, chatId, msg) {
     return;
   }
 
-  // AI chat
-  if (lower.startsWith('tanya ') || lower.startsWith('ai ') || lower.startsWith('!ai ')) {
-    const question = text.replace(/^(tanya|ai|!ai)\s+/i, '');
-    const kbAnswer = findKbAnswer(question);
-    if (kbAnswer) {
-      await sock.sendMessage(from, { text: kbAnswer });
-      return;
-    }
-    if (hasAIConfig()) {
-      const answer = await askAI(question);
-      await sock.sendMessage(from, { text: answer });
-      return;
-    }
-  }
+  // AI chat & KB fallback with Telegram forward
+  const { getIsLicensed } = require('./license-handler');
+  if (!getIsLicensed()) return;
 
   const kbAnswer = findKbAnswer(text);
   if (kbAnswer) {
-    await sock.sendMessage(from, { text: `${kbAnswer}\n\n_ketik 0 untuk kembali ke menu_` });
+    await sock.sendMessage(from, { text: kbAnswer });
     return;
   }
 
-  // Default: if no KB answer, answer with menu and do NOT notify telegram admin to avoid noise/ambiguity
+  if (hasAIConfig()) {
+    const answer = await askAI(text);
+    
+    // Check if AI gave the unhandled fallback response
+    if (answer.includes('belum memiliki informasi mengenai hal tersebut')) {
+      const adminId = process.env.TELEGRAM_ADMIN_ID;
+      if (adminId) {
+        const senderWa = from.replace(/@.*/, '');
+        sendMsg(adminId, `🚨 *Pertanyaan Customer Tidak Ditemukan di KB*\n\nDari: +${senderWa}\nPesan: "${text}"\n\nAI menjawab: "${answer}"\n\nSilakan balas langsung ke customer.`);
+      }
+      await sock.sendMessage(from, { text: answer });
+    } else {
+      await sock.sendMessage(from, { text: answer });
+    }
+    return;
+  }
+
+  // Default fallback if no AI config
   const businessMenu = buildBusinessMenu();
-  await sock.sendMessage(from, { text: businessMenu + '\n\n_ketik 0 untuk kembali ke menu_' });
+  await sock.sendMessage(from, { text: businessMenu });
 }
 
 module.exports = { handleMessage };
