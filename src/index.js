@@ -31,13 +31,15 @@ async function main() {
   setInterval(function() {
     const expired = checkExpiredTransactions();
     const sock = getSock();
+    const kb = require('./kb-loader');
+    const orderTrig = (kb.getConfigList('order_trigger', ['pesan', 'order', 'beli'])[0] || 'PESAN').toUpperCase();
     for (const chatId of expired) {
       const txn = expireTransaction(chatId);
       const notaNum = txn ? txn.data.notaNumber : '';
       if (sock) {
-        sock.sendMessage(chatId, { text: 'Pesanan *' + notaNum + '* sudah melewati batas waktu pembayaran (3 jam) dan otomatis hangus.\n\nSilakan ketik *PESAN* untuk membuat pesanan baru.' });
+        sock.sendMessage(chatId, { text: 'Pesanan *' + notaNum + '* sudah melewati batas waktu pembayaran dan otomatis hangus.\n\nSilakan ketik *' + orderTrig + '* untuk membuat pesanan baru.' });
       }
-      sendMsg(process.env.TELEGRAM_ADMIN_ID, 'Nota *' + notaNum + '* EXPIRED (customer tidak bayar dalam 3 jam)');
+      sendMsg(process.env.TELEGRAM_ADMIN_ID, 'Nota *' + notaNum + '* EXPIRED (customer tidak bayar dalam batas waktu)');
     }
   }, 5 * 60 * 1000);
 

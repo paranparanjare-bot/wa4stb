@@ -1,33 +1,21 @@
 const { log, generateId, formatCurrency, formatDate } = require('./utils');
+const kb = require('./kb-loader');
 
+// Engine order generik berbasis KB. State machine dibangun dari @step di KB.
 const transactions = new Map();
 const notaIndex = new Map(); // notaNumber -> chatId
-const PRICE_PER_SACHET = 10000;
-const PAYMENT_DEADLINE_MS = 3 * 60 * 60 * 1000;
-let notaCounter = 0;
 
-const STATES = {
-  IDLE: 'idle',
-  NAME: 'name',
-  ADDRESS: 'address',
-  PHONE: 'phone',
-  PEDAS: 'pedas',
-  SEDANG: 'sedang',
-  EXPEDITION: 'expedition',
-  SUMMARY: 'summary',
-  NOTA_SENT: 'nota_sent',
-  AWAITING_PAYMENT: 'awaiting_payment',
-  PAYMENT_VERIFIED: 'payment_verified',
-  COMPLETED: 'completed',
-  EXPIRED: 'expired',
-};
+function getStepFlow() {
+  const steps = kb.getSteps();
+  return ['idle', ...steps.map(s => s.id), 'summary', 'nota_sent', 'awaiting_payment', 'payment_verified', 'completed', 'expired'];
+}
 
 function getTransaction(chatId) {
-  return transactions.get(chatId) || { state: STATES.IDLE, data: {} };
+  return transactions.get(chatId) || { state: 'idle', data: {} };
 }
 
 function setTransaction(chatId, state, data = {}) {
-  const existing = transactions.get(chatId) || { state: STATES.IDLE, data: {} };
+  const existing = transactions.get(chatId) || { state: 'idle', data: {} };
   transactions.set(chatId, { state, data: { ...existing.data, ...data } });
 }
 
@@ -39,17 +27,18 @@ function resetTransaction(chatId) {
 
 function createOrder(chatId) {
   const id = generateId('ORD');
-  setTransaction(chatId, STATES.NAME, { orderId: id });
+  setTransaction(chatId, 'idle', { orderId: id });
   return id;
 }
 
 function generateNotaNumber() {
+  const prefix = kb.getConfig('nota_prefix', 'ORD');
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
   for (let i = 0; i < 6; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return result;
+  return prefix + '-' + result;
 }
 
 function findTransactionByNota(notaNumber) {
@@ -59,72 +48,80 @@ function findTransactionByNota(notaNumber) {
   return txn ? { chatId, txn } : null;
 }
 
+// Total produk dihitung dari field harga dinamis di KB atau per-item.
 function getTotalProduct(chatId) {
   const txn = getTransaction(chatId);
-  const pedas = parseInt(txn.data.pedas) || 0;
-  const sedang = parseInt(txn.data.sedang) || 0;
-  return (pedas + sedang) * PRICE_PER_SACHET;
+  const pricePer = kb.getConfig('price_per_item', null);
+  let total = 0;
+  if (pricePer !== null) {
+    const num = parseInt(txn.data.quantity) || 0;
+    total = num * pricePer;
+  } else {
+    for (const [k, v] of Object.entries(txn.data)) {
+      if (['quantity', 'ongkir', 'total'].includes(k)) continue;
+      const n = parseInt(v);
+      if (!isNaN(n) && /qty|jumlah|item|pcs|sachet|unit|produk/i.test(k)) total += n;
+    }
+  }
+  return total;
 }
+
+function getOrderedItems(chatId) {
+  const txn = getTransaction(chatId);
+  const steps = kb.getSteps();
+  const lines = [];
+  for (const s of steps) {
+    const val = txn.data[s.saveAs];
+    if (val === undefined || val === '') continue;
+    lines.push('• ' + (s.question || s.id) + ': ' + val);
+  }
+  return lines.join('\n');
 
 function getNotaMessage(chatId) {
   const txn = getTransaction(chatId);
   const d = txn.data;
-  const pedas = parseInt(d.pedas) || 0;
-  const sedang = parseInt(d.sedang) || 0;
   const totalProduct = getTotalProduct(chatId);
+  const waNum = d.waNumber || chatId.replace(/@.*/, '');
 
   return [
     '📋 *NOTA SEMENTARA* — ' + d.notaNumber,
     '',
-    'Customer: ' + d.name,
-    'WA: ' + (d.waNumber || chatId.replace(/@.*/, '')),
-    'Alamat: ' + d.address,
-    'No HP: ' + d.phone,
-    '',
-    'Pesanan:',
-    '• Pedas × ' + pedas + ' = ' + formatCurrency(pedas * PRICE_PER_SACHET),
-    '• Sedang × ' + sedang + ' = ' + formatCurrency(sedang * PRICE_PER_SACHET),
+    'Customer: ' + (d.name || '-'),
+    'WA: ' + waNum,
+    getOrderedItems(chatId),
     'Total Produk: *' + formatCurrency(totalProduct) + '*',
     '',
-    'Ekspedisi: ' + d.expedition,
     'Ongkir: _belum diisi_',
     '',
-    'Ketik /ongkir' + d.notaNumber + ' [nominal] untuk isi ongkir',
+    'Ketik /ongkir ' + d.notaNumber + ' [nominal] untuk isi ongkir',
   ].join('\n');
 }
 
 function getFinalNotaMessage(chatId) {
   const txn = getTransaction(chatId);
   const d = txn.data;
-  const pedas = parseInt(d.pedas) || 0;
-  const sedang = parseInt(d.sedang) || 0;
   const totalProduct = getTotalProduct(chatId);
   const ongkir = parseInt(d.ongkir) || 0;
   const grandTotal = totalProduct + ongkir;
-  const deadline = new Date(Date.now() + PAYMENT_DEADLINE_MS);
+  const deadlineMin = kb.getConfig('payment_deadline_minutes', 180);
+  const deadline = new Date(Date.now() + deadlineMin * 60 * 1000);
   const timeStr = deadline.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+  const payTemplate = kb.getConfig('payment_info', 'Silakan hubungi admin untuk metode pembayaran.');
 
   return [
     '📋 *NOTA PEMESANAN* — ' + d.notaNumber,
     '',
-    'Nama: ' + d.name,
-    'Alamat: ' + d.address,
-    'No HP: ' + d.phone,
-    '',
-    'Pesanan:',
-    '• Pedas × ' + pedas + ' = ' + formatCurrency(pedas * PRICE_PER_SACHET),
-    '• Sedang × ' + sedang + ' = ' + formatCurrency(sedang * PRICE_PER_SACHET),
+    'Nama: ' + (d.name || '-'),
+    'WA: ' + (d.waNumber || chatId.replace(/@.*/, '')),
+    getOrderedItems(chatId),
     '───────────────',
     'Total Produk: ' + formatCurrency(totalProduct),
     'Ongkir: ' + formatCurrency(ongkir),
     '*Grand Total: ' + formatCurrency(grandTotal) + '*',
     '',
-    'Ekspedisi: ' + d.expedition,
-    '',
     '💳 *CARA BAYAR:*',
-    'QRIS / Transfer BCA:',
-    '• BCA: 1801084287 a.n Sri Renaningtyasasih',
-    '• Wajib kirim bukti transfer/screenshot',
+    payTemplate,
     '',
     '⏰ Batas pembayaran: *' + timeStr + ' WIB*',
     '(Jika lewat ' + timeStr + ', pesanan otomatis hangus)',
@@ -136,38 +133,30 @@ function getFinalNotaMessage(chatId) {
 function getReceiptMessage(chatId) {
   const txn = getTransaction(chatId);
   const d = txn.data;
-  const pedas = parseInt(d.pedas) || 0;
-  const sedang = parseInt(d.sedang) || 0;
-  const totalProduct = getTotalProduct(chatId);
   const ongkir = parseInt(d.ongkir) || 0;
+  const totalProduct = getTotalProduct(chatId);
 
   return [
     '✅ *PEMBAYARAN TERVERIFIKASI*',
     '',
     'Nota: ' + d.notaNumber,
-    'Pesanan: ' + pedas + ' pcs Pedas, ' + sedang + ' pcs Sedang',
+    getOrderedItems(chatId),
     'Total: ' + formatCurrency(totalProduct + ongkir),
     '',
-    'Terima kasih sudah order di Bumbu BR Ayam Betetu 🙏',
-    'Pesanan Anda akan segera kami proses dan dikirim.',
-    'Update pengiriman: https://rebrand.ly/admin-br',
+    'Terima kasih sudah order 🙏',
+    'Pesanan Anda akan segera kami proses.',
   ].join('\n');
 }
 
 function getOrderSummary(chatId) {
   const txn = getTransaction(chatId);
   const d = txn.data;
-  const pedas = parseInt(d.pedas) || 0;
-  const sedang = parseInt(d.sedang) || 0;
   const totalProduct = getTotalProduct(chatId);
 
   return [
     'RINGKASAN PESANAN:',
     'Nama: ' + (d.name || '-'),
-    'Alamat: ' + (d.address || '-'),
-    'No HP: ' + (d.phone || '-'),
-    'Pesanan: ' + pedas + ' pcs Pedas, ' + sedang + ' pcs Sedang.',
-    'Ekspedisi: ' + (d.expedition || '-'),
+    getOrderedItems(chatId),
     'Total Harga Produk: ' + formatCurrency(totalProduct),
     '',
     'Apakah data ini sudah benar? (Jawab *YA* untuk lanjut, *BATAL* untuk batalkan)',
@@ -178,7 +167,7 @@ function checkExpiredTransactions() {
   const now = Date.now();
   const expired = [];
   for (const [chatId, txn] of transactions) {
-    if (txn.state === STATES.AWAITING_PAYMENT && txn.data.deadlineAt) {
+    if (txn.state === 'awaiting_payment' && txn.data.deadlineAt) {
       if (now > txn.data.deadlineAt) expired.push(chatId);
     }
   }
@@ -188,14 +177,14 @@ function checkExpiredTransactions() {
 function expireTransaction(chatId) {
   const txn = transactions.get(chatId);
   if (txn && txn.data.notaNumber) notaIndex.delete(txn.data.notaNumber);
-  transactions.set(chatId, { state: STATES.EXPIRED, data: txn ? txn.data : {} });
+  transactions.set(chatId, { state: 'expired', data: txn ? txn.data : {} });
   return txn;
 }
 
 function getAllPending() {
   const pending = [];
   for (const [chatId, txn] of transactions) {
-    if ([STATES.NOTA_SENT, STATES.AWAITING_PAYMENT, STATES.PAYMENT_VERIFIED].includes(txn.state)) {
+    if (['nota_sent', 'awaiting_payment', 'payment_verified'].includes(txn.state)) {
       pending.push({ chatId, txn });
     }
   }
@@ -203,9 +192,11 @@ function getAllPending() {
 }
 
 module.exports = {
-  STATES, PRICE_PER_SACHET, PAYMENT_DEADLINE_MS,
+  getStepFlow,
   getTransaction, setTransaction, resetTransaction, createOrder,
   generateNotaNumber, findTransactionByNota, notaIndex,
-  getTotalProduct, getNotaMessage, getFinalNotaMessage, getReceiptMessage, getOrderSummary,
+  getTotalProduct, getOrderedItems, getNotaMessage, getFinalNotaMessage, getReceiptMessage, getOrderSummary,
   checkExpiredTransactions, expireTransaction, getAllPending,
 };
+
+}

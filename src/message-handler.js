@@ -1,13 +1,27 @@
 const { log, findKbAnswer, buildBusinessMenu, hasAIConfig, getAdminContactPhone } = require('./utils');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
-const { askAI } = require('./ai-service');
+const { askAI, NOT_FOUND_MARKER } = require('./ai-service');
 const {
-  STATES, getTransaction, setTransaction, resetTransaction, createOrder,
-  getOrderSummary, getNotaMessage, getFinalNotaMessage, getReceiptMessage,
-  generateNotaNumber, notaIndex, PAYMENT_DEADLINE_MS, expireTransaction,
+  getTransaction, setTransaction, resetTransaction, createOrder,
+  generateNotaNumber, getOrderSummary, getNotaMessage, getFinalNotaMessage, getReceiptMessage,
+  getStepFlow, getTotalProduct,
 } = require('./transaction-manager');
 const { saveReceipt, getQRISPath } = require('./media-manager');
 const { sendMsg, sendPhotoMsg } = require('./telegram-handler');
+const kb = require('./kb-loader');
+
+function validateInput(validation, text) {
+  if (validation === 'number') return /^\d+$/.test(text.replace(/\D/g, ''));
+  if (validation === 'phone') return text.replace(/\D/g, '').length >= 8;
+  if (validation === 'name') return text.trim().length >= 2;
+  if (validation === 'address') return text.trim().length >= 5;
+  return text.trim().length >= 1;
+}
+
+function normalizeValue(validation, text) {
+  if (validation === 'phone' || validation === 'number') return text.replace(/\D/g, '');
+  return text.trim();
+}
 
 async function handleMessage(sock, chatId, msg) {
   const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
@@ -24,78 +38,62 @@ async function handleMessage(sock, chatId, msg) {
     const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
     if (!mentioned.some(j => j === sock.user?.id)) return;
   }
+
   const txn = getTransaction(from);
   const lower = text.toLowerCase().trim();
+  const flow = getStepFlow();
+  const steps = kb.getSteps();
+  const curState = txn.state;
+  const stateIdx = flow.indexOf(curState);
 
-  if (['menu', '/menu', '/start', 'help', 'halo', 'hai', 'hi', '0'].includes(lower)) {
+  // --- Menu / sapaan ---
+  const menuTriggers = kb.getConfigList('menu_trigger', ['menu', '/menu', 'halo', 'hai', 'hi', 'help', 'mulai']);
+  if (menuTriggers.some(t => lower === t.toLowerCase())) {
     resetTransaction(from);
-    const businessMenu = buildBusinessMenu();
-    await sock.sendMessage(from, {
-      text: businessMenu
-    });
+    await sock.sendMessage(from, { text: buildBusinessMenu() });
     return;
   }
 
-  switch (txn.state) {
-    case STATES.NAME: {
-      if (!text || lower.length < 2) { await sock.sendMessage(from, { text: 'Mohon ketik nama lengkapnya ya' }); return; }
-      setTransaction(from, STATES.ADDRESS, { name: text });
-      await sock.sendMessage(from, { text: 'Halo ' + text + ', senang bisa bantu\n\nBoleh ketik alamat lengkapnya untuk pengiriman?' });
-      return;
+  // --- Trigger order ---
+  const orderTriggers = kb.getConfigList('order_trigger', ['pesan', 'order', '/order', 'beli']);
+  if (stateIdx <= 0 && orderTriggers.some(t => lower === t.toLowerCase())) {
+    resetTransaction(from);
+    const waNumber = from.replace(/@.*/, '');
+    createOrder(from);
+    if (steps.length > 0) {
+      const first = steps[0];
+      setTransaction(from, first.id, { waNumber });
+      await sock.sendMessage(from, { text: first.question });
+    } else {
+      await sock.sendMessage(from, { text: 'Maaf, alur pemesanan belum dikonfigurasi di Knowledge Base.' });
     }
-    case STATES.ADDRESS: {
-      if (!text || lower.length < 5) { await sock.sendMessage(from, { text: 'Alamatnya kurang lengkap ya, boleh diketik ulang dengan detail' }); return; }
-      setTransaction(from, STATES.PHONE, { address: text });
-      await sock.sendMessage(from, { text: 'Baik, alamat sudah dicatat\n\nBoleh kasih nomor HP yang bisa dihubungi?' });
-      return;
-    }
-    case STATES.PHONE: {
-      if (!text || text.replace(/\D/g, '').length < 8) { await sock.sendMessage(from, { text: 'Nomor HP-nya sepertinya kurang lengkap, boleh ketik ulang?' }); return; }
-      setTransaction(from, STATES.PEDAS, { phone: text });
-      await sock.sendMessage(from, { text: 'Oke noted\n\nMau pesan bumbu varian PEDAS berapa sachet? (ketik angka, 0 jika tidak pesan)' });
-      return;
-    }
-    case STATES.PEDAS: {
-      const num = parseInt(text.replace(/\D/g, ''));
-      if (isNaN(num) || num < 0) { await sock.sendMessage(from, { text: 'Mohon ketik angka ya, contoh: 2' }); return; }
-      setTransaction(from, STATES.SEDANG, { pedas: String(num) });
-      await sock.sendMessage(from, { text: 'PEDAS ' + num + ' sachet, noted\n\nLalu varian SEDANG berapa sachet? (ketik angka, 0 jika tidak pesan)' });
-      return;
-    }
-    case STATES.SEDANG: {
-      const num = parseInt(text.replace(/\D/g, ''));
-      if (isNaN(num) || num < 0) { await sock.sendMessage(from, { text: 'Mohon ketik angka ya, contoh: 3' }); return; }
-      const pedas = parseInt(txn.data.pedas) || 0;
-      if (pedas === 0 && num === 0) {
-        await sock.sendMessage(from, { text: 'Jumlah kedua varian 0, sepertinya belum ada pesanan nih. Mau pesan PEDAS berapa sachet?' });
-        setTransaction(from, STATES.PEDAS); return;
-      }
-      setTransaction(from, STATES.EXPEDITION, { sedang: String(num) });
-      await sock.sendMessage(from, { text: 'PEDAS ' + pedas + ', SEDANG ' + num + ', noted\n\nMau pakai ekspedisi apa?\n1. *JNT*\n2. *Grab/Gojek* (area Banyuwangi)\n3. *Ambil sendiri* (area Banyuwangi)\n\nKetik nama atau angka pilihan' });
-      return;
-    }
-    case STATES.EXPEDITION: {
-      let expedition = text;
-      if (['1', 'jnt'].includes(lower)) expedition = 'JNT';
-      else if (['2', 'grab', 'gojek'].includes(lower)) expedition = 'Grab/Gojek';
-      else if (['3', 'ambil', 'ambil sendiri'].includes(lower)) expedition = 'Ambil sendiri';
-      else { await sock.sendMessage(from, { text: 'Pilihannya: *JNT*, *Grab/Gojek*, atau *Ambil sendiri*\n\nKetik salah satu ya' }); return; }
-      setTransaction(from, STATES.SUMMARY, { expedition });
-      await sock.sendMessage(from, { text: getOrderSummary(from) });
-      return;
-    }
-    case STATES.SUMMARY: {
-      if (['ya', 'y', 'ok', 'confirm', 'konfirmasi', 'benar', 'setuju'].includes(lower)) {
+    return;
+  }
+
+  // --- Batal ---
+  const cancelTriggers = kb.getConfigList('cancel_trigger', ['batal', 'cancel', '/cancel']);
+  if (cancelTriggers.some(t => lower === t.toLowerCase())) {
+    resetTransaction(from);
+    await sock.sendMessage(from, { text: 'Pesanan dibatalkan. Ketik *PESAN* jika ingin mulai ulang.' });
+    return;
+  }
+
+  // --- Jalan di dalam flow order ---
+  if (stateIdx > 0 && stateIdx < flow.length) {
+    if (curState === 'summary') {
+      const yes = kb.getConfigList('yes_keywords', ['ya', 'y', 'ok', 'confirm', 'konfirmasi', 'benar', 'setuju']);
+      const no = kb.getConfigList('no_keywords', ['batal', 'cancel', 'salah', 'ubah']);
+      if (yes.some(t => lower === t.toLowerCase())) {
         const notaNumber = generateNotaNumber();
-        notaIndex.set(notaNumber, from);
-        const deadlineAt = Date.now() + PAYMENT_DEADLINE_MS;
-        setTransaction(from, STATES.NOTA_SENT, { notaNumber, deadlineAt });
+        const deadlineMin = kb.getConfig('payment_deadline_minutes', 180);
+        const deadlineAt = Date.now() + deadlineMin * 60 * 1000;
+        setTransaction(from, 'nota_sent', { notaNumber, deadlineAt });
         await sock.sendMessage(from, { text: 'Pesanan dikonfirmasi\nNomor Nota: *' + notaNumber + '*\n\nMohon tunggu, admin sedang menghitung ongkir...' });
         const adminId = process.env.TELEGRAM_ADMIN_ID;
         if (adminId) sendMsg(adminId, getNotaMessage(from));
         return;
       }
-      if (['batal', 'cancel', 'salah', 'ubah'].includes(lower)) {
+      if (no.some(t => lower === t.toLowerCase())) {
         resetTransaction(from);
         await sock.sendMessage(from, { text: 'Pesanan dibatalkan. Ketik *PESAN* jika ingin mulai ulang.' });
         return;
@@ -103,64 +101,69 @@ async function handleMessage(sock, chatId, msg) {
       await sock.sendMessage(from, { text: 'Ketik *YA* untuk konfirmasi pesanan, atau *BATAL* jika ingin membatalkan' });
       return;
     }
-    case STATES.NOTA_SENT: {
+
+    if (curState === 'nota_sent') {
       await sock.sendMessage(from, { text: 'Nota *' + (txn.data.notaNumber || '-') + '* sudah dikirim ke admin.\n\nMohon tunggu, admin sedang menghitung ongkir.' });
       return;
     }
-    case STATES.AWAITING_PAYMENT: {
+
+    if (curState === 'awaiting_payment') {
       if (txn.data.deadlineAt && Date.now() > txn.data.deadlineAt) {
-        expireTransaction(from);
-        await sock.sendMessage(from, { text: 'Pesanan *' + (txn.data.notaNumber || '') + '* sudah melewati batas waktu pembayaran (3 jam).\n\nSilakan ketik *PESAN* untuk membuat pesanan baru.' });
+        resetTransaction(from);
+        await sock.sendMessage(from, { text: 'Pesanan *' + (txn.data.notaNumber || '') + '* sudah melewati batas waktu pembayaran.\n\nSilakan ketik *PESAN* untuk membuat pesanan baru.' });
         return;
       }
       if (msg.message?.imageMessage) {
-        setTransaction(from, STATES.COMPLETED, { paymentScreenshot: true });
+        setTransaction(from, 'completed', { paymentScreenshot: true });
         const adminId = process.env.TELEGRAM_ADMIN_ID;
         try {
           const buffer = await downloadMediaMessage(msg, 'buffer', {});
           saveReceipt((txn.data.notaNumber || 'receipt') + '-' + Date.now() + '.jpg', buffer);
-          // Forward screenshot ke Telegram admin
           if (adminId) {
-            const caption = '📸 *Bukti bayar diterima*\nNota: *' + (txn.data.notaNumber || '-') + '*\nCustomer: ' + (txn.data.name || '-') + '\nWA: ' + (txn.data.waNumber || from.replace(/@.*/, '')) + '\n\nKetik `/lunas' + (txn.data.notaNumber || '') + '` atau klik untuk verifikasi';
+            const caption = '📸 *Bukti bayar diterima*\nNota: *' + (txn.data.notaNumber || '-') + '*\nCustomer: ' + (txn.data.name || '-') + '\nWA: ' + (txn.data.waNumber || from.replace(/@.*/, '')) + '\n\nKetik `/lunas' + (txn.data.notaNumber || '') + '` untuk verifikasi';
             await sendPhotoMsg(adminId, buffer, caption);
           }
         } catch (e) { log('error', 'msg-handler', 'Forward screenshot failed', { error: e.message }); }
-        await sock.sendMessage(from, { text: 'Bukti pembayaran diterima untuk Nota *' + txn.data.notaNumber + '*\n\nAdmin akan memverifikasi. Mohon tunggu konfirmasi.' });
+        await sock.sendMessage(from, { text: 'Bukti pembayaran diterima untuk Nota *' + txn.data.notaNumber + '*.\n\nAdmin akan memverifikasi. Mohon tunggu konfirmasi.' });
         return;
       }
-      const remaining = txn.data.deadlineAt - Date.now();
+      const remaining = (txn.data.deadlineAt || Date.now()) - Date.now();
       const mins = Math.max(0, Math.floor(remaining / 60000));
-      await sock.sendMessage(from, { text: 'Mohon lakukan pembayaran dan kirim screenshot bukti bayar.\nSisa waktu: *' + mins + ' menit*\n\nCara bayar ada di nota sebelumnya.\nUpdate pengiriman: https://rebrand.ly/admin-br' });
+      await sock.sendMessage(from, { text: 'Mohon lakukan pembayaran dan kirim screenshot bukti bayar.\nSisa waktu: *' + mins + ' menit*' });
       return;
     }
-    case STATES.COMPLETED: {
-      await sock.sendMessage(from, { text: 'Pesanan sudah selesai. Ketik *PESAN* untuk order lagi, atau chat admin: https://rebrand.ly/admin-br' });
+
+    if (curState === 'completed') {
+      await sock.sendMessage(from, { text: 'Pesanan sudah selesai. Ketik *PESAN* untuk order lagi.' });
       return;
     }
-    case STATES.EXPIRED: {
+
+    if (curState === 'expired') {
       await sock.sendMessage(from, { text: 'Pesanan sebelumnya sudah hangus. Ketik *PESAN* untuk membuat pesanan baru.' });
       return;
     }
+
+    const stepIdx = steps.findIndex(s => s.id === curState);
+    if (stepIdx !== -1) {
+      const step = steps[stepIdx];
+      if (!validateInput(step.validation, text)) {
+        await sock.sendMessage(from, { text: 'Mohon isi dengan benar ya. ' + step.question });
+        return;
+      }
+      const data = {}; data[step.saveAs] = normalizeValue(step.validation, text);
+      const nextStep = steps[stepIdx + 1];
+      if (nextStep) {
+        setTransaction(from, nextStep.id, data);
+        await sock.sendMessage(from, { text: nextStep.question });
+      } else {
+        setTransaction(from, 'summary', data);
+        await sock.sendMessage(from, { text: getOrderSummary(from) });
+      }
+      return;
+    }
   }
 
-  // Start order
-  if (['pesan', 'order', '/order', 'beli'].includes(lower)) {
-    resetTransaction(from);
-    const waNumber = from.replace(/@.*/, '');
-    createOrder(from);
-    setTransaction(from, STATES.NAME, { waNumber });
-    await sock.sendMessage(from, { text: 'Baik, mari mulai pesanan\n\nSilakan ketik *nama lengkap* nya ya' });
-    return;
-  }
-
-  // Cancel
-  if (['batal', 'cancel', '/cancel'].includes(lower)) {
-    resetTransaction(from);
-    await sock.sendMessage(from, { text: 'Pesanan dibatalkan. Ketik *PESAN* jika ingin mulai ulang.' });
-    return;
-  }
-
-  // AI chat & KB fallback with Telegram forward
+  // --- AI chat & KB fallback with Telegram forward ---
   const { getIsLicensed } = require('./license-handler');
   if (!getIsLicensed()) return;
 
@@ -172,15 +175,14 @@ async function handleMessage(sock, chatId, msg) {
 
   if (hasAIConfig()) {
     const answer = await askAI(text);
-    
-    // Check if AI gave the unhandled fallback response
-    if (answer.includes('belum memiliki informasi mengenai hal tersebut')) {
+    if (answer.includes(NOT_FOUND_MARKER)) {
       const adminId = process.env.TELEGRAM_ADMIN_ID;
+      const fallbackMsg = answer.replace(NOT_FOUND_MARKER, '').trim() || kb.getConfig('fallback_message', 'Maaf, informasi tersebut belum tersedia. Silakan hubungi admin kami.');
       if (adminId) {
         const senderWa = from.replace(/@.*/, '');
-        sendMsg(adminId, `🚨 *Pertanyaan Customer Tidak Ditemukan di KB*\n\nDari: +${senderWa}\nPesan: "${text}"\n\nAI menjawab: "${answer}"\n\nSilakan balas langsung ke customer.`);
+        sendMsg(adminId, `🚨 *Pertanyaan Customer Tidak Ditemukan di KB*\n\nDari: +${senderWa}\nPesan: "${text}"\n\nAI: "${answer}"\n\nSilakan balas langsung ke customer.`);
       }
-      await sock.sendMessage(from, { text: answer });
+      await sock.sendMessage(from, { text: fallbackMsg });
     } else {
       await sock.sendMessage(from, { text: answer });
     }

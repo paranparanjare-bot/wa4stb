@@ -83,6 +83,11 @@ function searchKnowledgeBase(query) {
 }
 
 function buildBusinessMenu() {
+  try {
+    const kb = require('./kb-loader');
+    const greeting = kb.getConfig('greeting', null);
+    if (greeting) return greeting;
+  } catch (e) {}
   return 'Halo! Ada yang bisa saya bantu terkait produk atau layanan kami?';
 }
 

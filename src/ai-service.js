@@ -1,12 +1,18 @@
 const fetch = require('node-fetch');
 const { log, searchKnowledgeBase, findKbAnswer } = require('./utils');
+const kb = require('./kb-loader');
 
-const SYSTEM_PROMPT = `Kamu adalah asisten customer service ramah yang mewakili toko. 
-Gunakan Bahasa Indonesia natural, singkat, dan profesional.
-PENTING:
-1. Jawab pertanyaan berdasarkan informasi Knowledge Base yang diberikan.
-2. Jika informasi tidak ada di Knowledge Base, JANGAN MENGARANG. Jawab: "Mohon maaf, saya belum memiliki informasi mengenai hal tersebut. Pesan Anda telah diteruskan ke admin kami untuk direspon segera." dan informasikan bahwa customer menunggu jawaban.
-3. JANGAN PERNAH menyertakan kode teknis atau catatan developer. Berbicaralah murni sebagai CS.`;
+const NOT_FOUND_MARKER = '%%KB_TIDAK_TAHU%%';
+
+const SYSTEM_PROMPT = `Kamu adalah asisten cerdas yang mewakili sesebuah organisasi/usaha.
+Tugasmu HANYA menjawab berdasarkan informasi di KNOWLEDGE BASE (KB) yang diberikan di bawah.
+Aturan mutlak:
+1. Gunakan bahasa yang natural, ramah, dan seperti manusia sungguhan (sesuaikan dengan bahasa pengguna, utamanya Bahasa Indonesia).
+2. JANGAN MENGARANG. Jangan menambah fakta, harga, nomor, alamat, atau janji yang tidak ada di KB.
+3. Jika pertanyaan TIDAK DAPAT dijawab dari KB, balas TEPAT dengan teks berikut TANPA tambahan apapun:
+${NOT_FOUND_MARKER}
+4. Ikuti semua aturan/alur yang tertulis di KB (termasuk cara memesan, redirect nomor, dll) - jangan buat alur sendiri.
+5. Jangan pernah menyertakan kode teknis, catatan developer, atau menyebut bahwa kamu adalah AI/model.`;
 
 function getAIConfig() {
   return {
@@ -25,16 +31,14 @@ async function askAI(userMessage) {
   const kbAnswer = findKbAnswer(userMessage);
   if (!hasAIConfig()) {
     if (kbAnswer) return kbAnswer;
-    return 'Maaf, saat ini bot berjalan dalam mode KB-only. Silakan cek menu utama atau isi data usaha di admin panel.';
+    return 'Maaf, saat ini bot berjalan dalam mode KB-only. Silakan cek menu utama atau isi data di admin panel.';
   }
 
-  const kbResult = searchKnowledgeBase(userMessage);
-  let systemPrompt = SYSTEM_PROMPT;
+  const kbText = searchKnowledgeBase(userMessage) || '(tidak ada KB)';
+  let systemPrompt = SYSTEM_PROMPT.replace('NOT_FOUND_MARKER', NOT_FOUND_MARKER);
+  systemPrompt += `\n\n===== KNOWLEDGE BASE =====\n${kbText}\n===== AKHIR KB =====`;
+
   const { apiUrl, apiKey, model } = getAIConfig();
-  if (kbResult) {
-    systemPrompt += `\n\nBerikut adalah informasi dari knowledge base yang relevan:\n${kbResult}`;
-  }
-
   try {
     const res = await fetch(`${apiUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -48,8 +52,8 @@ async function askAI(userMessage) {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
         ],
-        max_tokens: 500,
-        temperature: 0.7,
+        max_tokens: 600,
+        temperature: 0.6,
         stream: false,
       }),
     });
@@ -65,4 +69,4 @@ async function askAI(userMessage) {
   }
 }
 
-module.exports = { askAI, hasAIConfig, getAIConfig };
+module.exports = { askAI, hasAIConfig, getAIConfig, NOT_FOUND_MARKER };

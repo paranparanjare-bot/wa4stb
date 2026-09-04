@@ -4,9 +4,10 @@ const fetch = global.fetch;
 const FormData = require('form-data');
 const { log, DATA_DIR, LOGS_DIR, formatCurrency } = require('./utils');
 const {
-  findTransactionByNota, setTransaction, STATES,
+  findTransactionByNota, setTransaction,
   getFinalNotaMessage, getReceiptMessage, resetTransaction, getAllPending,
 } = require('./transaction-manager');
+const kb = require('./kb-loader');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_ID = process.env.TELEGRAM_ADMIN_ID;
@@ -149,7 +150,7 @@ async function handleCommand(chatId, text) {
     if (isNaN(nominal) || nominal < 0) { sendMsg(chatId, 'Nominal ongkir tidak valid'); return; }
     const found = findTransactionByNota(notaNum);
     if (!found) { sendMsg(chatId, 'Nota *' + notaNum + '* tidak ditemukan.'); return; }
-    setTransaction(found.chatId, STATES.AWAITING_PAYMENT, { ongkir: String(nominal) });
+    setTransaction(found.chatId, 'awaiting_payment', { ongkir: String(nominal) });
     sendMsg(chatId, 'Nota *' + notaNum + '*\nOngkir: ' + formatCurrency(nominal) + '\n\nNota final dikirim ke customer.');
     const sock = getWASock();
     if (sock) {
@@ -181,11 +182,11 @@ async function handleCommand(chatId, text) {
       found = findTransactionByNota(notaNum);
     } else {
       const all = getAllPending();
-      const paying = all.find(p => p.txn.state === STATES.AWAITING_PAYMENT);
+      const paying = all.find(p => p.txn.state === 'awaiting_payment');
       if (paying) { found = paying; notaNum = paying.txn.data.notaNumber; }
     }
     if (!found) { sendMsg(chatId, 'Nota tidak ditemukan atau tidak ada order aktif.'); return; }
-    setTransaction(found.chatId, STATES.PAYMENT_VERIFIED);
+    setTransaction(found.chatId, 'payment_verified');
     sendMsg(chatId, 'Nota *' + notaNum + '* ditandai LUNAS.');
     const sock2 = getWASock();
     if (sock2) {

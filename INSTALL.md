@@ -1,138 +1,116 @@
-## Fresh Install di Windows 10 (Dari Nol)
+# Panduan Instalasi WA-STB Engine 🚀
 
-### 1. Install Node.js v18 LTS
+Pilih panduan instalasi sesuai dengan perangkat yang Anda gunakan:
 
-Download dari: **https://nodejs.org/en/download**
-
-Pilih **Windows Installer (.msi) 64-bit**, versi **LTS** ( minimal v18 atau v20 Rekomndasi v.22.23.2 LTS).
-
-Jalankan installer:
-- ✅ Add to PATH (default centang)
-- ✅ Install
-- ✅ Finish
-
-Buka **PowerShell / CMD**, verifikasi:
-```powershell
-node -v
-# harus: v18.x.x atau v20.x.x atau diatasnya
-
-npm -v
-# harus: 9.x.x atau 10.x.x
-```
-
-###Jika ada Masalah: PowerShell blokir script (.ps1) karena execution policy default **Restricted**.
-
-### Fix
-
-Jalankan PowerShell **as Administrator** (klik kanan PowerShell → Run as Administrator):
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-```
-
-Ketik `Y` lalu Enter.
-Lalu tutup PowerShell
+- **[1. Panduan untuk Windows (Lokal / PC / Laptop)](#-1-windows-local--pc)**
+- **[2. Panduan untuk Linux Server / STB (Native)](#-2-linux-server--stb-native)**
+- **[3. Panduan via SSH (VPS / Remote Server)](#-3-via-ssh-vps--remote-server)**
 
 ---
 
-Kembali ke PowerShell biasa (user biasa):
+## 💻 1. Windows (Local / PC)
 
-```powershell
-npm -v
-# seharusnya sudah jalan normal
-```
+### Persiapan:
+1. Install **Node.js LTS** dari [nodejs.org](https://nodejs.org/). Centang opsi tambahan jika ada.
+2. Install **Git** dari [git-scm.com](https://git-scm.com/).
+3. Siapkan Bot Telegram via **@BotFather** dan dapatkan ID Anda via **@userinfobot**.
 
----
-
-**Kenapa `RemoteSigned`?**
-- Script lokal tetap jalan
-- Script dari internet harus di-sign (aman)
-- Tidak perlu admin di masa depan
-- Tidak mengubah policy global sistem
-
-> Ini setting sekali, tidak perlu diulang.
-
----
-
-### 2. Install Git
-
-Download dari: **https://git-scm.com/download/win**
-Pilih : Click here to download
-Jalankan installer, tinggal next-next-next, semua default OK.
-
----
-
-### 3. Clone & Setup
-
-```powershell
-# Clone repo
-git clone https://github.com/paranparanjare-bot/wa4stb.git
-cd wa4stb
-
-# Install dependencies
-npm install
-
-# Buat file .env
-copy .env.example .env
-```
+### Langkah-langkah:
+1. Buka **PowerShell** atau **CMD**.
+2. Clone dan masuk ke folder:
+   ```powershell
+   git clone https://github.com/paranparanjare-bot/wa4stb.git
+   cd wa4stb
+   ```
+3. Install dependencies:
+   ```powershell
+   npm install
+   ```
+4. Buat file `.env`:
+   ```powershell
+   copy .env.example .env
+   ```
+5. Isi `.env` (Token Telegram & Admin ID) menggunakan Notepad.
+6. Jalankan bot:
+   ```powershell
+   npm start
+   ```
+7. Buka browser: `http://localhost:3000/admin` (Login default: `admin` / `admin`).
 
 ---
 
-### 4. Isi `.env`
+## 🐧 2. Linux Server / STB (Native)
 
-Buka `.env` di Notepad/VS Code:
+### Persiapan:
+Pastikan Node.js (v18+) dan Git sudah terinstall. Jika belum, gunakan pengelola paket (`apt`, `pkg`, dll).
 
-```env
-BOT_NAME=WA-STB-Bot
-TELEGRAM_BOT_TOKEN=token_dari_BotFather
-TELEGRAM_ADMIN_ID=id_anda
-AI_API_URL=
-AI_API_KEY=
-AI_MODEL=
-LICENSE_KEY=your-super-secret-encryption-key-here
-AUTO_DELETE_RECEIPTS=true
-RECEIPT_DELETE_DELAY_MS=300000
-MAX_FILE_SIZE_MB=10
-LOG_LEVEL=info
-```
-
-> **Telegram Bot Token**: chat @BotFather → `/newbot` → ikuti instruksi
-> **Telegram User ID**: chat @userinfobot → kirim apa saja → dapat ID angka
-
----
-
-### 5. Jalankan
-
-```powershell
-npm start
-```
+### Langkah-langkah:
+1. Buka terminal Linux / STB.
+2. Clone repository:
+   ```bash
+   git clone https://github.com/paranparanjare-bot/wa4stb.git
+   cd wa4stb
+   ```
+3. Install package:
+   ```bash
+   npm install
+   ```
+4. Buat file `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+5. Jalankan dengan PM2 agar stabil di background:
+   ```bash
+   npx pm2 start src/index.js --name wa4stb
+   npx pm2 save
+   ```
+6. Akses Admin Panel lewat IP server: `http://<IP_SERVER>:3000/admin`.
 
 ---
 
-### 6. Buka Admin Panel
+## 🔐 3. Via SSH (VPS / Remote Server)
 
-Browser → **http://localhost:3000/admin**
+Jika Anda meremote server cloud (DigitalOcean, AWS, Contabo, dll) atau STB via SSH dari perangkat lain:
 
-Alur:
-1. **Registrasi** → Telegram Bot Token & User ID
-2. **Login** → OTP masuk ke Telegram
-3. **Setup** → isi profil usaha (nama, alamat, produk, harga, dll)
-4. **Tab WhatsApp** → klik Generate QR → scan dengan HP
-5. ✅ Bot aktif!
+### Langkah-langkah:
+1. **Login ke Server via SSH:**
+   ```bash
+   ssh root@ip_server_anda
+   ```
+2. **Install Node.js & Git (Debian/Ubuntu):**
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+   sudo apt-get install -y nodejs git
+   ```
+3. **Clone & Install Bot:**
+   ```bash
+   git clone https://github.com/paranparanjare-bot/wa4stb.git
+   cd wa4stb
+   npm install
+   ```
+4. **Konfigurasi Environment:**
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+   *(Isi `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_ID`, lalu simpan dengan `Ctrl+O`, `Enter`, `Ctrl+X`)*
+5. **Jalankan dengan PM2 (Daemon Mode):**
+   ```bash
+   npx pm2 start src/index.js --name wa4stb
+   npx pm2 save
+   npx pm2 startup
+   ```
+6. **Akses:** Buka browser di laptop/HP Anda, lalu buka `http://ip_server_anda:3000/admin`.
 
-### Mode Alternatif
+---
 
-| Perintah | Fungsi |
-|---|---|
-| `npm start` | Admin mode (panel + Telegram, WA manual start) |
-| `node src/index.js --bot-only` | Bot-only mode (WA langsung jalan tanpa admin panel) |
+## 🧠 Konfigurasi Knowledge Base (KB)
+Setelah login ke Admin Panel, buka tab **Edit Knowledge Base**. Gunakan format:
+- `## SECTION: Nama` untuk kategori.
+- `@greeting: Halo` untuk pesan pembuka.
+- `@order_trigger: pesan` untuk pemicu pesanan.
 
-### Troubleshooting
+---
 
-| Masalah | Solusi |
-|---|---|
-| Port 3000 sudah dipakai | Set `ADMIN_PORT=3080` di `.env` |
-| QR scan gagal / timeout | Hapus folder `data/sessions/`, restart, scan ulang |
-| `node_modules` error | Hapus `node_modules` & `package-lock.json`, lalu `npm install` ulang |
-| Telegram OTP tidak masuk | Cek `TELEGRAM_BOT_TOKEN` & `TELEGRAM_ADMIN_ID` benar |
-### 
+*Dibuat untuk kemudahan instalasi di berbagai platform.*
+
