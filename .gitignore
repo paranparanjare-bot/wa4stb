@@ -3,3 +3,4 @@ data/
 logs/
 .env
 *.log
+public/qr-tmp.png
