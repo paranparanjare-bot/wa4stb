@@ -41,6 +41,7 @@ async function checkLicense() {
 
 async function activateLicense(key) {
   try {
+    console.log('Activating key:', key, 'to', CLOUDFLARE_API);
     const res = await fetch(`${CLOUDFLARE_API}/activate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
