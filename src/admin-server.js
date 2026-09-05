@@ -177,11 +177,26 @@ app.post('/admin/auth/activate-license', async (req, res) => {
   res.json(result);
 });
 
+app.post('/admin/auth/request-license', async (req, res) => {
+    if (!req.session.isAdmin) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    try {
+        const r = await fetch('http://localhost:4000/admin/send-license', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetTelegramId: 'AdminDashboard' })
+        });
+        const d = await r.json();
+        res.json(d);
+    } catch(e) {
+        res.json({ success: false, message: 'Gagal menghubungi License Hub: ' + e.message });
+    }
+
 app.post('/admin/auth/revoke-license', async (req, res) => {
   if (!req.session.isAdmin) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const { revokeLicense } = require('./license-handler');
   const result = await revokeLicense();
   res.json(result);
+});
 });
 
 function startAdminServer() { app.listen(port, '0.0.0.0', () => log('info', 'admin', 'Running')); }

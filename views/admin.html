@@ -48,12 +48,29 @@
 
         <div class="card"><h3>AI Gateway Config</h3><div class="small">Gateway URL:</div><input id="aiUrl" value="AI_URL"><div class="small">API Key:</div><input id="aiKey" type="password" value="AI_KEY"><div class="small">Model:</div><input id="aiModel" value="AI_MODEL"><button onclick="saveAi()">Simpan AI Config</button></div>
 
-        <div class="card"><h3>Lisensi</h3><div class="small">Status: LIC_STATUS</div><div style="border:1px solid #334155;border-radius:8px;padding:12px;margin-top:8px;background:#0f172a"><div class="small">License Key:</div><input id="licKey" value="LIC_KEY"><div class="small" style="margin-top:6px">LIC_INFO</div><div style="margin-top:10px"><button onclick="saveLic()">Aktifkan</button><button class="danger" style="margin-left:8px" onclick="revokeLic()">Logout</button></div></div></div>
+        <div class="card">
+            <h3>Manajemen Lisensi Lokal</h3>
+            <div class="small">Status: LIC_STATUS</div>
+            <div style="border:1px solid #334155;border-radius:8px;padding:12px;margin-top:8px;background:#0f172a">
+                <div class="small">License Key Aktif / Input:</div>
+                <input id="licKey" value="LIC_KEY" placeholder="Masukkan atau ambil key...">
+                <div class="small" style="margin-top:6px">LIC_INFO</div>
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                    <button onclick="saveLic()" style="flex:1">Aktifkan Key</button>
+                    <button onclick="requestNewLicense()" class="success" style="flex:1">Ambil Lisensi</button>
+                    <button class="danger" onclick="revokeLic()" style="flex:1">Logout / Unbind</button>
+                </div>
+                <div id="newLicenseBox" style="display:none;margin-top:10px;padding:10px;background:#1e293b;border:1px dashed #38bdf8;border-radius:6px">
+                    <div class="small" style="color:#38bdf8;font-weight:bold">Key Baru Berhasil Diambil:</div>
+                    <code id="displayNewKey" style="font-size:15px;color:#10b981;user-select:all"></code>
+                    <div class="small" style="margin-top:4px">Silakan klik tombol "Aktifkan Key" di atas untuk langsung menggunakannya.</div>
+                </div>
+            </div>
+        </div>
 
         <div class="card"><h3>Edit Knowledge Base</h3><select id="kb" onchange="loadKb()"><option value="">-- Pilih File KB --</option>KB_OPTIONS</select><textarea id="kbContent" rows="12" placeholder="Pilih file di atas..."></textarea><button onclick="saveKb()">Simpan KB</button></div>
 
         <div class="card"><h3>Ganti Password Admin</h3><input id="p1" type="password" placeholder="Password Lama"><input id="p2" type="password" placeholder="Password Baru"><button onclick="savePwd()">Simpan Password</button></div>
-
         <div class="card" style="text-align:center"><a href="/admin/logout" style="color:#ef4444;text-decoration:none;font-weight:bold">Logout</a></div>
     </div>
     <script>
@@ -62,8 +79,26 @@
         async function saveKb(){const f=document.getElementById('kb').value,c=document.getElementById('kbContent').value;if(!f){alert('Pilih file dulu');return}const r=await fetch('/admin/kb/'+f,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:c})});alert((await r.json()).message)}
         async function saveTelegram(){const t=document.getElementById('tgToken').value,a=document.getElementById('tgAdmin').value;const r=await fetch('/admin/config/telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t,adminId:a})});const d=await r.json();alert(d.message);if(d.success)location.reload()}
         async function saveAi(){const u=document.getElementById('aiUrl').value,k=document.getElementById('aiKey').value,m=document.getElementById('aiModel').value;const r=await fetch('/admin/config/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({aiUrl:u,apiKey:k,model:m})});alert((await r.json()).message)}
-        async function saveLic(){const key=document.getElementById('licKey').value.trim();if(!key){alert('Masukkan kode lisensi');return}const r=await fetch('/admin/auth/activate-license',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});const d=await r.json();alert(d.message);if(d.success)location.reload()}
+        async function saveLic(){
+            const key=document.getElementById('licKey').value.trim();
+            if(!key){alert('Masukkan kode lisensi');return}
+            const r=await fetch('/admin/auth/activate-license',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+            const d=await r.json();
+            alert(d.message || JSON.stringify(d));
+            if(d.success) location.reload();
+        }
         async function revokeLic(){if(!confirm('Logout lisensi dari perangkat ini?'))return;const r=await fetch('/admin/auth/revoke-license',{method:'POST'});const d=await r.json();alert(d.message);location.reload()}
+        async function requestNewLicense(){
+            const r = await fetch('/admin/auth/request-license', {method:'POST'});
+            const d = await r.json();
+            if(d.success){
+                const keyVal = d.key || (d.message ? d.message.replace('Key: ', '') : '');
+                document.getElementById('licKey').value = keyVal;
+                alert('Berhasil mengambil key baru: ' + keyVal);
+            } else {
+                alert('Gagal: ' + (d.message || 'Key habis'));
+            }
+        }
         function showQrModal(){document.getElementById('qrModal').classList.add('active')}
         function closeQrModal(){document.getElementById('qrModal').classList.remove('active')}
         function showResetModal(){document.getElementById('resetModal').classList.add('active');document.getElementById('resetStep1').style.display='block';document.getElementById('resetStep2').style.display='none';document.getElementById('resetMsg').innerText='';document.getElementById('resetOtp').value=''}
