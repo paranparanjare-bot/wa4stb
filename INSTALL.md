@@ -30,12 +30,13 @@ Pilih panduan instalasi sesuai dengan perangkat yang Anda gunakan:
    ```powershell
    copy .env.example .env
    ```
-5. Isi `.env` (Token Telegram & Admin ID) menggunakan Notepad.
+5. Isi `.env` (Token Telegram, Admin ID, dan `LICENSE_HUB_URL` bila menggunakan License Hub sendiri) menggunakan Notepad.
 6. Jalankan bot:
    ```powershell
    npm start
    ```
-7. Buka browser: `http://localhost:3000/admin` (Login default: `admin` / `admin`).
+7. Buka browser: `http://localhost:3000/admin` (Login awal: `admin` / `admin`).
+8. Segera buka bagian **Ganti Password Admin** dan ubah password default sebelum bot dipakai.
 
 ---
 
@@ -64,7 +65,7 @@ Pastikan Node.js (v18+) dan Git sudah terinstall. Jika belum, gunakan pengelola 
    npx pm2 start src/index.js --name wa4stb
    npx pm2 save
    ```
-6. Akses Admin Panel lewat IP server: `http://<IP_SERVER>:3000/admin`.
+6. Akses Admin Panel lewat IP server: `http://<IP_SERVER>:3000/admin`. Login awal `admin` / `admin`, lalu segera ganti password.
 
 ---
 

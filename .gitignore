@@ -1,8 +1,15 @@
 node_modules/
-data/
+data/*
+!data/knowledge/
+data/knowledge/*
+!data/knowledge/README.md
 logs/
 .env
 *.log
+**/.env
+**/logs/
+**/node_modules/
+/#referensi/
 public/qr-tmp.png
 auth-portal/
 

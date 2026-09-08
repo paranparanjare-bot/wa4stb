@@ -76,6 +76,7 @@ function getOrderedItems(chatId) {
     lines.push('• ' + (s.question || s.id) + ': ' + val);
   }
   return lines.join('\n');
+}
 
 function getNotaMessage(chatId) {
   const txn = getTransaction(chatId);
@@ -198,5 +199,3 @@ module.exports = {
   getTotalProduct, getOrderedItems, getNotaMessage, getFinalNotaMessage, getReceiptMessage, getOrderSummary,
   checkExpiredTransactions, expireTransaction, getAllPending,
 };
-
-}

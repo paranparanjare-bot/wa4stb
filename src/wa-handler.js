@@ -12,11 +12,13 @@ const SESSION_DIR = path.join(DATA_DIR, 'sessions');
 let sock = null;
 let reconnectTimer = null;
 let isConnecting = false;
+let isStopping = false;
 
 async function startWA() {
   if (isConnecting) return;
   if (sock && sock.ws?.readyState === 1) return;
 
+  isStopping = false;
   isConnecting = true;
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
@@ -54,6 +56,11 @@ async function startWA() {
       }
     }
     if (connection === 'close') {
+      if (isStopping) {
+        isConnecting = false;
+        sock = null;
+        return;
+      }
       const reason = lastDisconnect?.error?.output?.statusCode;
       if (reason === DisconnectReason.loggedOut) {
         isConnecting = false;
@@ -130,4 +137,19 @@ async function startWA() {
 
 function getSock() { return sock; }
 
-module.exports = { startWA, getSock };
+async function stopWA() {
+  isStopping = true;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  isConnecting = false;
+  const currentSock = sock;
+  sock = null;
+  if (currentSock) {
+    try { currentSock.ws.close(); } catch (e) {}
+  }
+  setWAStatus('disconnected');
+}
+
+module.exports = { startWA, stopWA, getSock };

@@ -38,8 +38,8 @@
         <!-- Reset OTP Modal -->
         <div id="resetModal" class="modal"><div class="modal-content">
             <h3>Reset Session</h3>
-            <div id="resetStep1"><p style="color:#94a3b8;font-size:13px">Kirim OTP ke Telegram dulu</p><button onclick="requestResetOtp()">Kirim OTP</button></div>
-            <div id="resetStep2" style="display:none"><input class="otp-input" id="resetOtp" maxlength="6" placeholder="000000"><button onclick="confirmReset()">Reset Sekarang</button></div>
+            <div id="resetStep1"><p style="color:#94a3b8;font-size:13px">Kode OTP akan dikirim ke Telegram admin.</p><button id="sendResetOtpButton" onclick="requestResetOtp()">Kirim OTP ke Telegram</button></div>
+            <div id="resetStep2" style="display:none"><input class="otp-input" id="resetOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"><button id="confirmResetButton" onclick="confirmReset()">Reset / Clear Session</button></div>
             <p id="resetMsg" style="font-size:12px;color:#38bdf8;margin-top:10px"></p>
             <button style="margin-top:10px;background:#64748b" onclick="closeResetModal()">Batal</button>
         </div></div>
@@ -58,7 +58,7 @@
                 <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
                     <button onclick="saveLic()" style="flex:1">Aktifkan Key</button>
                     <button onclick="requestNewLicense()" class="success" style="flex:1">Ambil Lisensi</button>
-                    <button class="danger" onclick="revokeLic()" style="flex:1">Logout / Unbind</button>
+                    <button class="danger" onclick="revokeLic()" style="flex:1" DISABLE_REVOKE_LICENSE>Logout / Unbind</button>
                 </div>
                 <div id="newLicenseBox" style="display:none;margin-top:10px;padding:10px;background:#1e293b;border:1px dashed #38bdf8;border-radius:6px">
                     <div class="small" style="color:#38bdf8;font-weight:bold">Key Baru Berhasil Diambil:</div>
@@ -87,7 +87,7 @@
             alert(d.message || JSON.stringify(d));
             if(d.success) location.reload();
         }
-        async function revokeLic(){if(!confirm('Logout lisensi dari perangkat ini?'))return;const r=await fetch('/admin/auth/revoke-license',{method:'POST'});const d=await r.json();alert(d.message);location.reload()}
+        async function revokeLic(){if(!confirm('Logout dan unbind lisensi dari perangkat ini?'))return;const button=document.querySelector('button[onclick="revokeLic()"]');if(button)button.disabled=true;try{const r=await fetch('/admin/auth/revoke-license',{method:'POST',credentials:'same-origin'});if(r.status===401){location.href='/admin/login';return}const d=await r.json();alert(d.message||'Tidak ada respons dari server lisensi.');location.reload()}catch(e){alert('Gagal menghubungi server admin: '+e.message);if(button)button.disabled=false}}
         async function requestNewLicense(){
             const r = await fetch('/admin/auth/request-license', {method:'POST'});
             const d = await r.json();
@@ -103,8 +103,8 @@
         function closeQrModal(){document.getElementById('qrModal').classList.remove('active')}
         function showResetModal(){document.getElementById('resetModal').classList.add('active');document.getElementById('resetStep1').style.display='block';document.getElementById('resetStep2').style.display='none';document.getElementById('resetMsg').innerText='';document.getElementById('resetOtp').value=''}
         function closeResetModal(){document.getElementById('resetModal').classList.remove('active')}
-        async function requestResetOtp(){document.getElementById('resetMsg').innerText='Mengirim OTP...';const r=await fetch('/admin/reset-request-otp',{method:'POST'});const d=await r.json();if(d.success){document.getElementById('resetStep1').style.display='none';document.getElementById('resetStep2').style.display='block';document.getElementById('resetMsg').innerText='OTP terkirim! Cek Telegram.'}else{document.getElementById('resetMsg').innerText='Gagal: '+d.message}}
-        async function confirmReset(){const otp=document.getElementById('resetOtp').value.trim();if(!otp){alert('Masukkan OTP');return}const r=await fetch('/admin/verify-reset-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp})});const d=await r.json();if(d.success){alert('Session di-reset!');location.reload()}else{alert('OTP salah / expired!')}}
+        async function requestResetOtp(){const msg=document.getElementById('resetMsg');const button=document.getElementById('sendResetOtpButton');button.disabled=true;msg.innerText='Mengirim OTP ke Telegram...';try{const r=await fetch('/admin/reset-request-otp',{method:'POST',credentials:'same-origin'});if(r.status===401){location.href='/admin/login';return}const d=await r.json();if(!r.ok||!d.success){msg.innerText='Gagal mengirim OTP: '+(d.message||'Telegram tidak merespons');button.disabled=false;return}document.getElementById('resetStep1').style.display='none';document.getElementById('resetStep2').style.display='block';msg.innerText=d.message+' Masukkan OTP di sini.';document.getElementById('resetOtp').focus()}catch(e){msg.innerText='Gagal menghubungi server admin.';button.disabled=false}}
+        async function confirmReset(){const otp=document.getElementById('resetOtp').value.trim();const msg=document.getElementById('resetMsg');const button=document.getElementById('confirmResetButton');if(!/^\d{6}$/.test(otp)){msg.innerText='OTP harus terdiri dari 6 angka.';return}button.disabled=true;msg.innerText='Memverifikasi OTP dan menghapus session...';try{const r=await fetch('/admin/verify-reset-otp',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp})});if(r.status===401){location.href='/admin/login';return}const d=await r.json();if(d.success){alert('Session berhasil di-reset / clear.');location.reload()}else{msg.innerText=d.message||'OTP salah / expired.';button.disabled=false}}catch(e){msg.innerText='Gagal menghubungi server admin.';button.disabled=false}}
         if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js')}
     </script>
 </body>

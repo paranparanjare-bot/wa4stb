@@ -65,16 +65,22 @@ async function activateLicense(key) {
 async function revokeLicense() {
   try {
     const data = fs.existsSync(LICENSE_FILE) ? JSON.parse(fs.readFileSync(LICENSE_FILE, 'utf-8')) : null;
+    let remoteResult = { success: true };
     if (data && data.key) {
-      await fetch(`${CLOUDFLARE_API}/revoke`, {
+      const response = await fetch(`${CLOUDFLARE_API}/revoke`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: data.key })
       });
-      fs.unlinkSync(LICENSE_FILE);
+      const body = await response.json().catch(() => ({}));
+      remoteResult = { success: response.ok && body.success !== false, message: body.message };
     }
+    if (fs.existsSync(LICENSE_FILE)) fs.unlinkSync(LICENSE_FILE);
     isLicensed = false;
-    return { success: true, message: 'Lisensi berhasil di-logout dari server ini.' };
+    if (!remoteResult.success) {
+      return { success: false, message: 'Lisensi dihapus dari lokal, tetapi server lisensi menolak unbind: ' + (remoteResult.message || 'endpoint revoke tidak tersedia.') };
+    }
+    return { success: true, message: 'Lisensi berhasil di-logout dan di-unbind.' };
   } catch (e) {
     return { success: false, message: 'Gagal logout: ' + e.message };
   }
