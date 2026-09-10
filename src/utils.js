@@ -4,6 +4,9 @@ const path = require('path');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const LOGS_DIR = path.join(__dirname, '..', 'logs');
 
+// ---- Priority file dalam Knowledge Base: dibaca terlebih dahulu ----
+const KB_PRIORITY_FILES = ['knowledge.txt'];
+
 function log(level, module, msg, data) {
   const ts = new Date().toISOString();
   const line = `[${ts}] [${level.toUpperCase()}] [${module}] ${msg}${data ? ' ' + JSON.stringify(data) : ''}`;
@@ -28,17 +31,26 @@ function formatCurrency(amount) {
   return 'Rp ' + amount.toLocaleString('id-ID');
 }
 
+function sortKbFiles(files) {
+  // Pisahkan priority files dan non-priority files
+  const priority = files.filter(f => KB_PRIORITY_FILES.includes(f)).sort();
+  const nonPriority = files.filter(f => !KB_PRIORITY_FILES.includes(f)).sort();
+  // Priority files didepan, diikuti file lain secara alphabetical
+  return [...priority, ...nonPriority];
+}
+
 function readKnowledgeBase() {
   const kbDir = path.join(DATA_DIR, 'knowledge');
   if (!fs.existsSync(kbDir)) return '';
-  const files = fs.readdirSync(kbDir).filter(f => f.endsWith('.txt'));
+  const files = sortKbFiles(fs.readdirSync(kbDir).filter(f => f.endsWith('.txt')));
   return files.map(f => fs.readFileSync(path.join(kbDir, f), 'utf-8')).join('\n\n');
 }
 
 function getKbFiles() {
   const kbDir = path.join(DATA_DIR, 'knowledge');
   if (!fs.existsSync(kbDir)) return [];
-  return fs.readdirSync(kbDir).filter(f => f.endsWith('.txt')).sort();
+  const files = fs.readdirSync(kbDir).filter(f => f.endsWith('.txt'));
+  return sortKbFiles(files);
 }
 
 // Universal KB search without rigid hardcoded keyword fragments

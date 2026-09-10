@@ -4,8 +4,19 @@ const { log, DATA_DIR } = require('./utils');
 
 const KB_DIR = path.join(DATA_DIR, 'knowledge');
 
+// ---- Priority file: dibaca terlebih dahulu sebelum file lain ----
+const KB_PRIORITY_FILES = ['knowledge.txt'];
+
 // ---- Cache berdasar mtime folder KB ----
 let cache = { key: null, data: null };
+
+function sortKbFiles(files) {
+  // Pisahkan priority files dan non-priority files
+  const priority = files.filter(f => KB_PRIORITY_FILES.includes(f)).sort();
+  const nonPriority = files.filter(f => !KB_PRIORITY_FILES.includes(f)).sort();
+  // Priority files didepan, diikuti file lain secara alphabetical
+  return [...priority, ...nonPriority];
+}
 
 function kbSignature() {
   try {
@@ -62,7 +73,7 @@ function parseKb() {
   const data = emptyData();
   let files = [];
   try {
-    files = fs.readdirSync(KB_DIR).filter(f => f.endsWith('.txt')).sort();
+    files = sortKbFiles(fs.readdirSync(KB_DIR).filter(f => f.endsWith('.txt')));
   } catch (e) {
     cache = { key: sig, data };
     return data;
